@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role;
 
 class AuthController extends Controller
 {
@@ -27,6 +28,8 @@ class AuthController extends Controller
             'email' => $data['email'],
             'password' => $data['password'],
         ]);
+
+        $doctor->assignRole($this->doctorRole());
 
         return response()->json(
             $this->createTokenResponse($doctor, $data['device_name'] ?? 'mobile'),
@@ -50,6 +53,10 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($doctor->roles()->doesntExist()) {
+            $doctor->assignRole($this->doctorRole());
+        }
+
         return response()->json(
             $this->createTokenResponse($doctor, $data['device_name'] ?? 'mobile')
         );
@@ -59,6 +66,7 @@ class AuthController extends Controller
     {
         return response()->json([
             'doctor' => $request->user(),
+            'roles' => $request->user()->getRoleNames(),
         ]);
     }
 
@@ -81,9 +89,15 @@ class AuthController extends Controller
         ]);
 
         return [
-            'doctor' => $doctor,
+            'doctor' => $doctor->fresh(),
+            'roles' => $doctor->getRoleNames(),
             'token' => $plainToken,
             'token_type' => 'Bearer',
         ];
+    }
+
+    private function doctorRole(): Role
+    {
+        return Role::findOrCreate('doctor', 'web');
     }
 }

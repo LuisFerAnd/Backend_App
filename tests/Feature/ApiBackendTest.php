@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ApiBackendTest extends TestCase
@@ -59,5 +61,68 @@ class ApiBackendTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('consultation.subjective', 'Paciente refiere dolor desde hace dos dias.')
             ->assertJsonPath('consultation.patient.dni', '0801199012345');
+    }
+
+    public function test_admin_can_see_all_records_and_doctor_cannot_use_admin_routes(): void
+    {
+        $admin = User::factory()->create([
+            'email' => 'admin@example.test',
+        ]);
+
+        $admin->assignRole(Role::findOrCreate('admin', 'web'));
+
+        $adminToken = $this->postJson('/api/doctors/login', [
+            'email' => 'admin@example.test',
+            'password' => 'password',
+        ])->json('token');
+
+        $doctorResponse = $this->postJson('/api/doctors/register', [
+            'name' => 'Dr. Jose Rivera',
+            'email' => 'jose@example.test',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ]);
+
+        $doctorToken = $doctorResponse->json('token');
+
+        $patientResponse = $this
+            ->withToken($doctorToken)
+            ->postJson('/api/patients', [
+                'first_name' => 'Maria',
+                'last_name' => 'Hernandez',
+                'dni' => '0801200012345',
+            ]);
+
+        $this
+            ->withToken($doctorToken)
+            ->postJson('/api/consultations', [
+                'patient_id' => $patientResponse->json('patient.id'),
+                'subjective' => 'Consulta de seguimiento.',
+                'objective' => 'Paciente estable.',
+                'assessment' => 'Evolucion favorable.',
+                'plan' => 'Continuar tratamiento.',
+            ])
+            ->assertCreated();
+
+        $this
+            ->withToken($adminToken)
+            ->getJson('/api/admin/summary')
+            ->assertOk()
+            ->assertJsonPath('summary.doctors', 1)
+            ->assertJsonPath('summary.admins', 1)
+            ->assertJsonPath('summary.patients', 1)
+            ->assertJsonPath('summary.consultations', 1);
+
+        $this
+            ->withToken($adminToken)
+            ->getJson('/api/admin/consultations')
+            ->assertOk()
+            ->assertJsonPath('consultations.data.0.patient.dni', '0801200012345')
+            ->assertJsonPath('consultations.data.0.doctor.email', 'jose@example.test');
+
+        $this
+            ->withToken($doctorToken)
+            ->getJson('/api/admin/summary')
+            ->assertForbidden();
     }
 }
