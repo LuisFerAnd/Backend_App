@@ -26,7 +26,13 @@ class PatientController extends Controller
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
             'last_name' => ['required', 'string', 'max:120'],
-            'dni' => ['required', 'string', 'max:30', 'unique:patients,dni'],
+            'dni' => [
+                'required',
+                'string',
+                'max:30',
+                Rule::unique('patients', 'dni')
+                    ->where(fn ($query) => $query->where('doctor_id', $request->user()->id)),
+            ],
         ]);
 
         $patient = Patient::create([
@@ -60,7 +66,9 @@ class PatientController extends Controller
                 'required',
                 'string',
                 'max:30',
-                Rule::unique('patients', 'dni')->ignore($patient),
+                Rule::unique('patients', 'dni')
+                    ->where(fn ($query) => $query->where('doctor_id', $request->user()->id))
+                    ->ignore($patient),
             ],
         ]);
 

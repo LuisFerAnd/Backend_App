@@ -63,6 +63,55 @@ class ApiBackendTest extends TestCase
             ->assertJsonPath('consultation.patient.dni', '0801199012345');
     }
 
+    public function test_doctor_records_are_scoped_to_each_doctor(): void
+    {
+        $firstDoctorToken = $this->postJson('/api/doctors/register', [
+            'name' => 'Dra. Ana Lopez',
+            'email' => 'ana@example.test',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->json('token');
+
+        $secondDoctorToken = $this->postJson('/api/doctors/register', [
+            'name' => 'Dr. Jose Rivera',
+            'email' => 'jose@example.test',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->json('token');
+
+        $this
+            ->withToken($firstDoctorToken)
+            ->postJson('/api/patients', [
+                'first_name' => 'Carlos',
+                'last_name' => 'Martinez',
+                'dni' => '0801199012345',
+            ])
+            ->assertCreated();
+
+        $this
+            ->withToken($secondDoctorToken)
+            ->postJson('/api/patients', [
+                'first_name' => 'Pedro',
+                'last_name' => 'Alvarez',
+                'dni' => '0801199012345',
+            ])
+            ->assertCreated();
+
+        $this
+            ->withToken($firstDoctorToken)
+            ->getJson('/api/patients')
+            ->assertOk()
+            ->assertJsonCount(1, 'patients')
+            ->assertJsonPath('patients.0.first_name', 'Carlos');
+
+        $this
+            ->withToken($secondDoctorToken)
+            ->getJson('/api/patients')
+            ->assertOk()
+            ->assertJsonCount(1, 'patients')
+            ->assertJsonPath('patients.0.first_name', 'Pedro');
+    }
+
     public function test_admin_can_see_all_records_and_doctor_cannot_use_admin_routes(): void
     {
         $admin = User::factory()->create([
