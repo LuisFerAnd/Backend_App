@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\Consultation;
 use App\Models\Patient;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -43,24 +42,5 @@ class DemoDataSeeder extends Seeder
             ]
         );
 
-        Consultation::query()->updateOrCreate(
-            [
-                'doctor_id' => $doctor->id,
-                'patient_id' => $patient->id,
-                'reason' => 'Consulta general de prueba',
-            ],
-            [
-                'consulted_at' => now()->subDay(),
-                'subjective' => 'Paciente refiere malestar general desde ayer.',
-                'objective' => 'Signos vitales dentro de parametros esperados.',
-                'assessment' => 'Cuadro leve en observacion.',
-                'plan' => 'Hidratacion, reposo y seguimiento si aparecen nuevos sintomas.',
-                'vital_signs' => [
-                    'temperature' => 37.2,
-                    'heart_rate' => 78,
-                    'blood_pressure' => '120/80',
-                ],
-            ]
-        );
     }
 }
