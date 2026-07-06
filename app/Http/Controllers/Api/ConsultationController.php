@@ -38,7 +38,6 @@ class ConsultationController extends Controller
     public function exportCosts(Request $request): StreamedResponse
     {
         $consultations = Consultation::with('patient')
-            ->where('doctor_id', $request->user()->id)
             ->latest('consulted_at')
             ->get();
 

@@ -504,9 +504,20 @@ class ApiBackendTest extends TestCase
         });
     }
 
-    public function test_doctor_can_export_consultation_ai_costs_as_csv(): void
+    public function test_only_admin_can_export_consultation_ai_costs_as_csv(): void
     {
-        $token = $this->postJson('/api/doctors/register', [
+        $admin = User::factory()->create([
+            'email' => 'admin@example.test',
+        ]);
+
+        $admin->assignRole(Role::findOrCreate('admin', 'web'));
+
+        $adminToken = $this->postJson('/api/doctors/login', [
+            'email' => 'admin@example.test',
+            'password' => 'password',
+        ])->json('token');
+
+        $doctorToken = $this->postJson('/api/doctors/register', [
             'name' => 'Dra. Ana Lopez',
             'email' => 'ana@example.test',
             'password' => 'password123',
@@ -514,7 +525,7 @@ class ApiBackendTest extends TestCase
         ])->json('token');
 
         $patientId = $this
-            ->withToken($token)
+            ->withToken($doctorToken)
             ->postJson('/api/patients', [
                 'first_name' => 'Carlos',
                 'last_name' => 'Martinez',
@@ -523,7 +534,7 @@ class ApiBackendTest extends TestCase
             ->json('patient.id');
 
         $this
-            ->withToken($token)
+            ->withToken($doctorToken)
             ->postJson('/api/consultations', [
                 'patient_id' => $patientId,
                 'reason' => 'Fiebre',
@@ -548,8 +559,13 @@ class ApiBackendTest extends TestCase
             ])
             ->assertCreated();
 
+        $this
+            ->withToken($doctorToken)
+            ->get('/api/consultations/costs/export')
+            ->assertForbidden();
+
         $response = $this
-            ->withToken($token)
+            ->withToken($adminToken)
             ->get('/api/consultations/costs/export');
 
         $response->assertOk();

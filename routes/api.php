@@ -17,7 +17,8 @@ Route::middleware('doctor.auth')->group(function (): void {
     Route::post('/doctors/logout', [AuthController::class, 'logout']);
 
     Route::apiResource('patients', PatientController::class)->except(['destroy']);
-    Route::get('/consultations/costs/export', [ConsultationController::class, 'exportCosts']);
+    Route::get('/consultations/costs/export', [ConsultationController::class, 'exportCosts'])
+        ->middleware('admin');
     Route::apiResource('consultations', ConsultationController::class)->except(['destroy']);
     Route::post('/ai/transcriptions', [AiConsultationController::class, 'transcribe']);
     Route::post('/ai/consultation-draft', [AiConsultationController::class, 'draft']);
