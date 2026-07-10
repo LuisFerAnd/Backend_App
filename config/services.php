@@ -2,10 +2,6 @@
 
 return [
 
-    'spss' => [
-        'python' => env('SPSS_PYTHON_BINARY', 'python3'),
-    ],
-
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

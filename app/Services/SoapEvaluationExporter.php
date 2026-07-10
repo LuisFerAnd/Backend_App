@@ -6,6 +6,9 @@ use Illuminate\Support\Collection;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
+use SPSS\Sav\Reader as SavReader;
+use SPSS\Sav\Variable as SavVariable;
+use SPSS\Sav\Writer as SavWriter;
 
 class SoapEvaluationExporter
 {
@@ -87,13 +90,88 @@ class SoapEvaluationExporter
 
     private function sav(Collection $rows): string
     {
-        $input = $this->temp('json'); $output = $this->temp('sav');
-        file_put_contents($input, json_encode(['rows' => $rows, 'variables' => $this->variables()], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
-        $script = base_path('scripts/export_sav.py');
-        $command = escapeshellarg(config('services.spss.python', 'python3')).' '.escapeshellarg($script).' '.escapeshellarg($input).' '.escapeshellarg($output).' 2>&1';
-        exec($command, $lines, $status); @unlink($input);
-        if ($status !== 0 || ! is_file($output) || filesize($output) === 0) { @unlink($output); throw new RuntimeException('No se pudo generar SAV: '.implode("\n", $lines)); }
-        return $output;
+        $path = $this->temp('sav');
+        $definitions = $this->variables();
+        $variables = [];
+
+        foreach ($definitions as $name => $metadata) {
+            $values = $rows->pluck($name)->all();
+            $isNumeric = in_array($metadata[1], ['integer', 'decimal'], true);
+            $variable = [
+                'name' => $name,
+                'label' => $metadata[0],
+                'width' => $isNumeric ? 8 : $this->stringWidth($values),
+                'decimals' => $metadata[1] === 'decimal' ? 2 : 0,
+                'format' => $isNumeric ? SavVariable::FORMAT_TYPE_F : SavVariable::FORMAT_TYPE_A,
+                'columns' => $isNumeric ? 12 : min($this->stringWidth($values), 80),
+                'alignment' => $isNumeric ? SavVariable::ALIGN_RIGHT : SavVariable::ALIGN_LEFT,
+                'measure' => $this->measureFor($name, $isNumeric),
+                'values' => $this->valueLabelsFor($name),
+                'data' => array_map(
+                    fn ($value) => $value === null ? '' : ($isNumeric ? (float) $value : (string) $value),
+                    $values
+                ),
+            ];
+            $variables[] = $variable;
+        }
+
+        try {
+            $writer = SavWriter::createInFile([
+                'header' => [
+                    'prodName' => '@(#) SANARE SOAP EVALUATIONS',
+                    'layoutCode' => 2,
+                    'compression' => 1,
+                    'weightIndex' => 0,
+                    'bias' => 100,
+                    'creationDate' => now()->format('d M y'),
+                    'creationTime' => now()->format('H:i:s'),
+                ],
+                'variables' => $variables,
+            ], $path);
+            $writer->close();
+
+            $verified = SavReader::fromFile($path)->read();
+            if (count($verified->data) !== $rows->count() || count($verified->variables) !== count($definitions)) {
+                throw new RuntimeException('La verificación del archivo SAV no coincide con los datos exportados.');
+            }
+        } catch (\Throwable $exception) {
+            @unlink($path);
+            throw new RuntimeException('No se pudo generar un archivo SAV válido.', previous: $exception);
+        }
+
+        return $path;
+    }
+
+    private function stringWidth(array $values): int
+    {
+        $maximum = max(array_map(fn ($value) => strlen((string) ($value ?? '')), $values) ?: [1]);
+        return min(max($maximum, 8), 2000);
+    }
+
+    private function measureFor(string $name, bool $isNumeric): int
+    {
+        if (! $isNumeric) return SavVariable::MEASURE_NOMINAL;
+        if (preg_match('/^(uso_|transcripcion_|procesamiento_|generacion_|soap_(subjetivo|objetivo|evaluacion|plan|ubicacion|claridad)|err_|up[1-6]$|fu[1-6]$)/', $name)) {
+            return SavVariable::MEASURE_ORDINAL;
+        }
+        return SavVariable::MEASURE_SCALE;
+    }
+
+    private function valueLabelsFor(string $name): array
+    {
+        if (in_array($name, ['uso_prototipo', 'transcripcion_audio', 'procesamiento_clinico', 'generacion_soap'], true)) {
+            return [0 => 'No', 1 => 'Sí'];
+        }
+        if (preg_match('/^soap_(subjetivo|objetivo|evaluacion|plan|ubicacion|claridad)$/', $name)) {
+            return [0 => 'No cumple', 1 => 'Cumple parcialmente', 2 => 'Cumple'];
+        }
+        if (preg_match('/^err_(transcripcion|omision|agregada|confusion|ubicacion|redaccion)$/', $name)) {
+            return [0 => 'No presenta', 1 => 'Error leve', 2 => 'Error moderado', 3 => 'Error grave'];
+        }
+        if (preg_match('/^(up|fu)[1-6]$/', $name)) {
+            return [1 => 'Totalmente en desacuerdo', 2 => 'En desacuerdo', 3 => 'Neutral', 4 => 'De acuerdo', 5 => 'Totalmente de acuerdo'];
+        }
+        return [];
     }
 
     private function temp(string $extension): string

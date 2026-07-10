@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fd37c06ccd892e427a02a80d3b1387c0",
+    "content-hash": "c3bb52e3372cad2fb0f6e0bf30ab5710",
     "packages": [
         {
             "name": "brick/math",
@@ -582,6 +582,88 @@
                 }
             ],
             "time": "2025-03-06T22:45:56+00:00"
+        },
+        {
+            "name": "flobee/spss",
+            "version": "5.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/flobee/spss.git",
+                "reference": "a78b07e842b999de91f60f9585cdfa95ee1fca79"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/flobee/spss/zipball/a78b07e842b999de91f60f9585cdfa95ee1fca79",
+                "reference": "a78b07e842b999de91f60f9585cdfa95ee1fca79",
+                "shasum": ""
+            },
+            "require": {
+                "ext-bcmath": "*",
+                "ext-mbstring": "*",
+                "php": ">=5.6"
+            },
+            "require-dev": {
+                "composer/composer": "^2.1.",
+                "friendsofphp/php-cs-fixer": "^2.16",
+                "phing/phing": "*",
+                "phpunit/phpunit": "^5.7 || ^6.4 || ^7.0 || ^9",
+                "squizlabs/php_codesniffer": "*"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SPSS\\": "src/"
+                },
+                "classmap": [
+                    "src/"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Korniienko Vladyslav",
+                    "email": "vk.tiamo@gmail.com",
+                    "role": "origin"
+                },
+                {
+                    "name": "Florian Blasel",
+                    "email": "flobee.code@gmail.com",
+                    "role": "Developer"
+                },
+                {
+                    "name": "Sam Mousa",
+                    "email": "sam@mousa.nl",
+                    "role": "Developer"
+                }
+            ],
+            "description": "SPSS is a php-based implementation of IBM SPSS Statistics Standard. (Read/write SPSS, PSPP .sav files)",
+            "keywords": [
+                "cli",
+                "cli-app",
+                "dataset",
+                "ibm",
+                "por",
+                "pspp",
+                "reader",
+                "sav",
+                "spss",
+                "statistics",
+                "writer"
+            ],
+            "support": {
+                "issues": "https://github.com/flobee/spss/issues",
+                "source": "https://github.com/flobee/spss/tree/5.0.0"
+            },
+            "funding": [
+                {
+                    "url": "https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=9UFPH5MGUD7LS&source=url",
+                    "type": "custom"
+                }
+            ],
+            "time": "2022-02-28T13:04:33+00:00"
         },
         {
             "name": "fruitcake/php-cors",

@@ -8,12 +8,11 @@ Desde `backend_App`:
 composer install
 php artisan migrate --force
 php artisan db:seed --class=RoleSeeder --force
-python3 -m pip install "pandas>=2.0" "pyreadstat>=1.2.8"
 ```
 
-En servidores con más de una instalación de Python, configure `SPSS_PYTHON_BINARY` con la ruta absoluta del intérprete que contiene `pandas` y `pyreadstat`. La zona horaria usa `APP_TIMEZONE` y, si no se define, `America/Tegucigalpa`.
+La zona horaria usa `APP_TIMEZONE` y, si no se define, `America/Tegucigalpa`.
 
-La nueva dependencia PHP `phpoffice/phpspreadsheet` genera XLSX. El script `scripts/export_sav.py` genera un SAV real y lo vuelve a abrir antes de entregarlo; si la verificación falla, el endpoint no descarga un archivo inválido.
+Las dependencias PHP `phpoffice/phpspreadsheet` y `flobee/spss` generan XLSX y SAV, respectivamente. El backend vuelve a abrir cada SAV con PHP antes de entregarlo; si la verificación falla, el endpoint no descarga un archivo inválido. `flobee/spss` requiere las extensiones PHP `bcmath` y `mbstring`.
 
 ## Prueba funcional
 
