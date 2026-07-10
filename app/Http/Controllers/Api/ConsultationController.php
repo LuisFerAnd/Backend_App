@@ -21,7 +21,7 @@ class ConsultationController extends Controller
             $this->findDoctorPatient($request, $filters['patient_id']);
         }
 
-        $consultations = Consultation::with('patient')
+        $consultations = Consultation::with(['patient', 'soapEvaluation:id,consultation_id,status,test_code'])
             ->where('doctor_id', $request->user()->id)
             ->when(
                 isset($filters['patient_id']),
@@ -107,7 +107,7 @@ class ConsultationController extends Controller
         ]);
 
         return response()->json([
-            'consultation' => $consultation->load('patient'),
+            'consultation' => $consultation->load(['patient', 'soapEvaluation:id,consultation_id,status,test_code']),
         ], 201);
     }
 

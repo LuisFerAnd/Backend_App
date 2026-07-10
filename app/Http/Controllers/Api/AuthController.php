@@ -18,6 +18,7 @@ class AuthController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'specialization' => ['sometimes', 'nullable', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::min(8)],
             'device_name' => ['sometimes', 'string', 'max:120'],
@@ -25,6 +26,7 @@ class AuthController extends Controller
 
         $doctor = User::create([
             'name' => $data['name'],
+            'specialization' => $data['specialization'] ?? 'Medicina general',
             'email' => $data['email'],
             'password' => $data['password'],
         ]);

@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\AiConsultationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConsultationController;
 use App\Http\Controllers\Api\PatientController;
+use App\Http\Controllers\Api\SoapEvaluationController;
+use App\Http\Controllers\Api\SoapEvaluationExportController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('doctors')->group(function (): void {
@@ -22,11 +24,18 @@ Route::middleware('doctor.auth')->group(function (): void {
     Route::apiResource('consultations', ConsultationController::class)->except(['destroy']);
     Route::post('/ai/transcriptions', [AiConsultationController::class, 'transcribe']);
     Route::post('/ai/consultation-draft', [AiConsultationController::class, 'draft']);
+    Route::get('/consultations/{consultation}/soap-evaluation', [SoapEvaluationController::class, 'forConsultation']);
+    Route::put('/soap-evaluations/{evaluation}', [SoapEvaluationController::class, 'update']);
+    Route::post('/soap-evaluations/{evaluation}/complete', [SoapEvaluationController::class, 'complete']);
+    Route::get('/soap-evaluations/{evaluation}', [SoapEvaluationController::class, 'show']);
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/summary', [AdminController::class, 'summary']);
         Route::get('/doctors', [AdminController::class, 'doctors']);
         Route::get('/patients', [AdminController::class, 'patients']);
         Route::get('/consultations', [AdminController::class, 'consultations']);
+        Route::get('/soap-evaluations', [SoapEvaluationController::class, 'index']);
+        Route::get('/soap-evaluations/export/{format}', SoapEvaluationExportController::class)
+            ->whereIn('format', ['csv', 'xlsx', 'sav']);
     });
 });

@@ -1,0 +1,60 @@
+<?php
+
+namespace App\Services;
+
+class SoapEvaluationCalculator
+{
+    public const BINARY = ['use_prototype', 'audio_transcription', 'clinical_processing', 'soap_generation'];
+    public const SOAP = ['soap_subjective', 'soap_objective', 'soap_assessment', 'soap_plan', 'soap_placement', 'soap_clarity'];
+    public const ERRORS = ['error_transcription', 'error_omission', 'error_added', 'error_confusion', 'error_placement', 'error_wording'];
+    public const UTILITY = ['utility_1', 'utility_2', 'utility_3', 'utility_4', 'utility_5', 'utility_6'];
+    public const EASE = ['ease_1', 'ease_2', 'ease_3', 'ease_4', 'ease_5', 'ease_6'];
+
+    public function calculate(array $data): array
+    {
+        if (array_key_exists('manual_time_seconds', $data) && array_key_exists('ai_time_seconds', $data)
+            && $data['manual_time_seconds'] !== null && $data['ai_time_seconds'] !== null) {
+            $data['time_difference_seconds'] = (int) $data['manual_time_seconds'] - (int) $data['ai_time_seconds'];
+        }
+
+        if ($this->allPresent($data, self::SOAP)) {
+            $data['soap_total'] = $this->sum($data, self::SOAP);
+            $data['soap_max'] = 12;
+            $data['soap_percentage'] = round(($data['soap_total'] / 12) * 100, 2);
+        }
+
+        if ($this->allPresent($data, self::ERRORS)) {
+            $values = array_map(fn (string $key) => (int) $data[$key], self::ERRORS);
+            $data['error_total'] = array_sum($values);
+            $data['error_none_count'] = count(array_filter($values, fn (int $value) => $value === 0));
+            $data['error_mild_count'] = count(array_filter($values, fn (int $value) => $value === 1));
+            $data['error_moderate_count'] = count(array_filter($values, fn (int $value) => $value === 2));
+            $data['error_severe_count'] = count(array_filter($values, fn (int $value) => $value === 3));
+        }
+
+        foreach ([['keys' => self::UTILITY, 'prefix' => 'utility'], ['keys' => self::EASE, 'prefix' => 'ease']] as $scale) {
+            if ($this->allPresent($data, $scale['keys'])) {
+                $total = $this->sum($data, $scale['keys']);
+                $data[$scale['prefix'].'_total'] = $total;
+                $data[$scale['prefix'].'_average'] = round($total / 6, 2);
+            }
+        }
+
+        return $data;
+    }
+
+    public function requiredFields(): array
+    {
+        return [...self::BINARY, 'manual_time_seconds', ...self::SOAP, ...self::ERRORS, ...self::UTILITY, ...self::EASE];
+    }
+
+    private function allPresent(array $data, array $keys): bool
+    {
+        return collect($keys)->every(fn (string $key) => array_key_exists($key, $data) && $data[$key] !== null);
+    }
+
+    private function sum(array $data, array $keys): int
+    {
+        return array_sum(array_map(fn (string $key) => (int) $data[$key], $keys));
+    }
+}

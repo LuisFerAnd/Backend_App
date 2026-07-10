@@ -57,6 +57,7 @@ class AdminController extends Controller
         $consultations = Consultation::with([
             'doctor:id,name,email',
             'patient:id,doctor_id,first_name,last_name,dni',
+            'soapEvaluation:id,consultation_id,status,test_code',
         ])
             ->latest('consulted_at')
             ->paginate($perPage);

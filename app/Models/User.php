@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'specialization', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -32,6 +32,11 @@ class User extends Authenticatable
     public function consultations(): HasMany
     {
         return $this->hasMany(Consultation::class, 'doctor_id');
+    }
+
+    public function soapEvaluations(): HasMany
+    {
+        return $this->hasMany(SoapEvaluation::class, 'evaluator_id');
     }
 
     /**

@@ -15,7 +15,7 @@ class AiConsultationController extends Controller
     public function transcribe(Request $request, OpenAIClinicalAssistant $assistant): JsonResponse
     {
         $data = $request->validate([
-            'audio' => ['required', 'file', 'mimes:mp3,mp4,mpeg,mpga,m4a,wav,webm', 'max:25600'],
+            'audio' => ['required', 'file', 'mimes:mp3,mp4,mpeg,mpga,m4a,wav,webm', 'max:102400'],
             'language' => ['sometimes', 'nullable', 'string', 'max:10'],
             'prompt' => ['sometimes', 'nullable', 'string', 'max:1000'],
         ]);
@@ -42,7 +42,7 @@ class AiConsultationController extends Controller
     {
         $data = $request->validate([
             'patient_id' => ['sometimes', 'nullable', 'integer', 'exists:patients,id'],
-            'audio' => ['sometimes', 'file', 'mimes:mp3,mp4,mpeg,mpga,m4a,wav,webm', 'max:25600'],
+            'audio' => ['sometimes', 'file', 'mimes:mp3,mp4,mpeg,mpga,m4a,wav,webm', 'max:102400'],
             'transcript' => ['required_without:audio', 'nullable', 'string', 'max:60000'],
             'language' => ['sometimes', 'nullable', 'string', 'max:10'],
             'prompt' => ['sometimes', 'nullable', 'string', 'max:1000'],
