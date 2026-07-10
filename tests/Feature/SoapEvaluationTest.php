@@ -97,7 +97,17 @@ class SoapEvaluationTest extends TestCase
     {
         [$doctor, $consultation] = $this->consultation();
         $evaluation = app(SoapEvaluationFactory::class)->firstOrCreate($consultation, $doctor);
-        $evaluation->update(['status' => 'completed']);
+        $evaluation->update([
+            'status' => 'completed',
+            'error_transcription' => 0,
+            'error_omission' => 0,
+            'error_added' => 0,
+            'error_confusion' => 0,
+            'error_placement' => 0,
+            'error_wording' => 0,
+            'error_total' => 0,
+            'error_none_count' => 6,
+        ]);
         $admin = User::factory()->create(); $admin->assignRole('admin'); $token = $this->login($admin);
 
         $csv = $this->withToken($token)->get('/api/admin/soap-evaluations/export/csv?status=completed')->assertOk();
@@ -108,6 +118,11 @@ class SoapEvaluationTest extends TestCase
         $path = tempnam(sys_get_temp_dir(), 'xlsx'); file_put_contents($path, $xlsx->streamedContent());
         $book = IOFactory::load($path); unlink($path);
         $this->assertSame(['Datos', 'Diccionario'], $book->getSheetNames());
+        $sheet = $book->getSheetByName('Datos');
+        $headers = array_flip($sheet->rangeToArray('A1:AZ1')[0]);
+        $this->assertSame(0, $sheet->getCell([$headers['err_transcripcion'] + 1, 2])->getValue());
+        $this->assertSame(0, $sheet->getCell([$headers['err_total'] + 1, 2])->getValue());
+        $this->assertSame(6, $sheet->getCell([$headers['err_sin_error'] + 1, 2])->getValue());
 
         $sav = $this->withToken($token)->get('/api/admin/soap-evaluations/export/sav?status=completed')->assertOk();
         $this->assertGreaterThan(500, strlen($sav->streamedContent()));

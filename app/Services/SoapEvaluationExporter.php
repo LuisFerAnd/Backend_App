@@ -81,7 +81,14 @@ class SoapEvaluationExporter
     {
         $spreadsheet = new Spreadsheet(); $data = $spreadsheet->getActiveSheet(); $data->setTitle('Datos');
         $data->fromArray([array_keys($this->variables())], null, 'A1');
-        if ($rows->isNotEmpty()) $data->fromArray($rows->map(fn ($r) => array_values($r))->all(), null, 'A2');
+        if ($rows->isNotEmpty()) {
+            $data->fromArray(
+                $rows->map(fn ($r) => array_values($r))->all(),
+                null,
+                'A2',
+                true
+            );
+        }
         $dictionary = $spreadsheet->createSheet(); $dictionary->setTitle('Diccionario');
         $dictionary->fromArray([['variable', 'etiqueta', 'tipo', 'valores_unidad', 'seccion']], null, 'A1');
         $line = 2; foreach ($this->variables() as $name => $meta) $dictionary->fromArray([[$name, ...$meta]], null, 'A'.$line++);
