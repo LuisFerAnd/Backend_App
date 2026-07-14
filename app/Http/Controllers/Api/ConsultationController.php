@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Consultation;
 use App\Models\Patient;
+use App\Services\SoapEvaluationFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -104,7 +105,21 @@ class ConsultationController extends Controller
             'doctor_id' => $request->user()->id,
             'patient_id' => $patient->id,
             'consulted_at' => $data['consulted_at'] ?? now(),
+            'started_at' => $data['consulted_at'] ?? now(),
+            'finished_at' => now(),
+            'recording_status' => 'completed',
+            'upload_status' => 'completed',
+            'transcription_status' => 'completed',
+            'processing_status' => 'completed',
+            'soap_status' => 'completed',
+            'pdf_status' => data_get($data, 'vital_signs.local_pdf_path') ? 'completed' : 'not_generated',
+            'overall_status' => 'completed',
+            'is_evaluable' => true,
         ]);
+        $consultation->update([
+            'consultation_code' => 'C-'.$consultation->consulted_at->timezone(config('app.timezone'))->format('d-m-Y').'-'.str_pad((string) $consultation->id, 6, '0', STR_PAD_LEFT),
+        ]);
+        app(SoapEvaluationFactory::class)->firstOrCreate($consultation, $request->user());
 
         return response()->json([
             'consultation' => $consultation->load(['patient', 'soapEvaluation:id,consultation_id,status,test_code']),
@@ -132,6 +147,9 @@ class ConsultationController extends Controller
         }
 
         $consultation->update($data);
+        if (data_get($data, 'vital_signs.local_pdf_path')) {
+            $consultation->update(['pdf_status' => 'completed']);
+        }
 
         return response()->json([
             'consultation' => $consultation->load('patient'),

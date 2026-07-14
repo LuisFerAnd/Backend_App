@@ -26,6 +26,8 @@ Las dependencias PHP `phpoffice/phpspreadsheet` y `flobee/spss` generan XLSX y S
 
 El CSV usa UTF-8 con BOM y encabezados; el XLSX contiene `Datos` y `Diccionario`; el SAV contiene etiquetas de variables y valores. Ninguno incluye paciente, audio, transcripción ni texto SOAP.
 
+La sección de errores usa `1=Totalmente erróneo`, `2=Grave`, `3=Moderado`, `4=Leve` y `5=No presenta`. Cuando no se generó un SOAP, CSV y XLSX dejan vacíos los criterios SOAP y de errores; las columnas `soap_generado`, `estado_general` y `tipo_resultado_evaluacion` conservan la causa. SAV conserva `98=No aplica: no se generó SOAP` como valor perdido definido por el usuario, por lo que SPSS lo muestra con su etiqueta pero lo excluye de medias y demás cálculos estadísticos.
+
 ## Pruebas automatizadas
 
 ```bash

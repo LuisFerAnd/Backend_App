@@ -53,12 +53,18 @@ class AdminController extends Controller
     public function consultations(Request $request): JsonResponse
     {
         $perPage = $this->perPage($request);
+        $status = $request->validate([
+            'overall_status' => ['nullable', 'string', 'in:created,recording,recording_completed,uploading,transcribing,generating_soap,completed,completed_with_warnings,failed,cancelled,pending_sync'],
+            'failure_stage' => ['nullable', 'string', 'max:40'],
+        ]);
 
         $consultations = Consultation::with([
             'doctor:id,name,email',
             'patient:id,doctor_id,first_name,last_name,dni',
             'soapEvaluation:id,consultation_id,status,test_code',
         ])
+            ->when($status['overall_status'] ?? null, fn ($query, $value) => $query->where('overall_status', $value))
+            ->when($status['failure_stage'] ?? null, fn ($query, $value) => $query->where('failure_stage', $value))
             ->latest('consulted_at')
             ->paginate($perPage);
 

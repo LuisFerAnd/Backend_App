@@ -9,7 +9,6 @@ use App\Services\SoapEvaluationCalculator;
 use App\Services\SoapEvaluationFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -61,8 +60,23 @@ class SoapEvaluationController extends Controller
         }
 
         $data = $request->validate($this->rules());
+        $evaluation->loadMissing('consultation');
+        $soapGenerated = $evaluation->consultation?->soap_status === 'completed';
+        if (! $soapGenerated) {
+            foreach (SoapEvaluationCalculator::SOAP as $field) {
+                $data[$field] = 98;
+            }
+            foreach (SoapEvaluationCalculator::ERRORS as $field) {
+                $data[$field] = 98;
+            }
+            $data['evaluation_result_type'] ??= $evaluation->consultation?->overall_status === 'cancelled' ? 'cancelled_by_user' : 'technical_failure';
+        } else {
+            $hasSoapDeficiencies = collect(SoapEvaluationCalculator::SOAP)
+                ->contains(fn (string $field) => isset($data[$field]) && (int) $data[$field] < 2);
+            $data['evaluation_result_type'] ??= $hasSoapDeficiencies ? 'soap_with_errors' : 'successful_soap';
+        }
         $merged = $calculator->calculate([...$evaluation->toArray(), ...$data]);
-        $missing = collect($calculator->requiredFields())->filter(fn (string $key) => ! array_key_exists($key, $merged) || $merged[$key] === null)->values();
+        $missing = collect($calculator->requiredFields($soapGenerated))->filter(fn (string $key) => ! array_key_exists($key, $merged) || $merged[$key] === null)->values();
         if ($missing->isNotEmpty()) {
             throw ValidationException::withMessages(['required_fields' => ['Faltan respuestas obligatorias: '.$missing->join(', ')]]);
         }
@@ -76,7 +90,11 @@ class SoapEvaluationController extends Controller
         $merged['version'] = $expectedVersion + 1;
 
         $updated = SoapEvaluation::whereKey($evaluation->id)->where('version', $expectedVersion)->update($merged);
-        if (! $updated) return response()->json(['message' => 'Conflicto de versión.'], 409);
+        if (! $updated) {
+            return response()->json(['message' => 'Conflicto de versión.'], 409);
+        }
+
+        $evaluation->consultation()->update(['evaluation_status' => 'completed']);
 
         return response()->json(['evaluation' => $this->load($evaluation->fresh())]);
     }
@@ -94,14 +112,16 @@ class SoapEvaluationController extends Controller
     public function show(Request $request, SoapEvaluation $evaluation): JsonResponse
     {
         $this->authorizeEvaluation($request, $evaluation, 'evaluations.view_own');
+
         return response()->json(['evaluation' => $this->load($evaluation)]);
     }
 
     public function filteredQuery(array $filters)
     {
-        return SoapEvaluation::query()->with(['consultation:id,consulted_at', 'evaluator:id,name,specialization'])
+        return SoapEvaluation::query()->with(['consultation:id,consultation_code,consulted_at,recording_duration_seconds,recording_status,upload_status,transcription_status,soap_status,pdf_status,overall_status,failure_stage,failure_code,user_friendly_error_message,expected_segments,received_segments,transcribed_segments', 'processingAttempt', 'evaluator:id,name,specialization'])
             ->when($filters['search'] ?? null, fn ($q, $v) => $q->where(fn ($inner) => $inner->where('test_code', 'like', "%$v%")->orWhere('evaluator_name', 'like', "%$v%")->orWhere('evaluator_specialization', 'like', "%$v%")))
             ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
+            ->when($filters['overall_status'] ?? null, fn ($q, $v) => $q->whereHas('consultation', fn ($c) => $c->where('overall_status', $v)))
             ->when($filters['evaluation_id'] ?? null, fn ($q, $v) => $q->whereKey($v))
             ->when($filters['evaluator_id'] ?? null, fn ($q, $v) => $q->where('evaluator_id', $v))
             ->when($filters['specialization'] ?? null, fn ($q, $v) => $q->where('evaluator_specialization', $v))
@@ -112,16 +132,25 @@ class SoapEvaluationController extends Controller
 
     public function filterRules(): array
     {
-        return ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', Rule::in(['pending', 'draft', 'completed'])], 'evaluation_id' => ['nullable', 'integer', 'exists:soap_evaluations,id'], 'evaluator_id' => ['nullable', 'integer'], 'specialization' => ['nullable', 'string', 'max:255'], 'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'], 'sort' => ['nullable', Rule::in(['test_date', 'test_code'])], 'direction' => ['nullable', Rule::in(['asc', 'desc'])]];
+        return ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', Rule::in(['pending', 'draft', 'completed', 'provisional'])], 'overall_status' => ['nullable', Rule::in(['created', 'recording', 'recording_completed', 'uploading', 'transcribing', 'generating_soap', 'completed', 'completed_with_warnings', 'failed', 'cancelled', 'pending_sync'])], 'evaluation_id' => ['nullable', 'integer', 'exists:soap_evaluations,id'], 'evaluator_id' => ['nullable', 'integer'], 'specialization' => ['nullable', 'string', 'max:255'], 'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'], 'sort' => ['nullable', Rule::in(['test_date', 'test_code'])], 'direction' => ['nullable', Rule::in(['asc', 'desc'])]];
     }
 
     private function rules(): array
     {
         $rules = ['version' => ['required', 'integer', 'min:1'], 'consultation_duration_seconds' => ['nullable', 'integer', 'min:0'], 'consultation_duration_source' => ['nullable', Rule::in(['system', 'manual'])], 'manual_time_seconds' => ['nullable', 'integer', 'min:0'], 'error_observations' => ['nullable', 'string', 'max:2000']];
-        foreach (SoapEvaluationCalculator::BINARY as $field) $rules[$field] = ['nullable', Rule::in([0, 1])];
-        foreach (SoapEvaluationCalculator::SOAP as $field) $rules[$field] = ['nullable', Rule::in([0, 1, 2])];
-        foreach (SoapEvaluationCalculator::ERRORS as $field) $rules[$field] = ['nullable', Rule::in([0, 1, 2, 3])];
-        foreach ([...SoapEvaluationCalculator::UTILITY, ...SoapEvaluationCalculator::EASE] as $field) $rules[$field] = ['nullable', Rule::in([1, 2, 3, 4, 5])];
+        foreach (SoapEvaluationCalculator::BINARY as $field) {
+            $rules[$field] = ['nullable', Rule::in([0, 1])];
+        }
+        foreach (SoapEvaluationCalculator::SOAP as $field) {
+            $rules[$field] = ['nullable', Rule::in([0, 1, 2, 98])];
+        }
+        foreach (SoapEvaluationCalculator::ERRORS as $field) {
+            $rules[$field] = ['nullable', Rule::in([1, 2, 3, 4, 5, 98])];
+        }
+        foreach ([...SoapEvaluationCalculator::UTILITY, ...SoapEvaluationCalculator::EASE] as $field) {
+            $rules[$field] = ['nullable', Rule::in([1, 2, 3, 4, 5])];
+        }
+
         return $rules;
     }
 
@@ -133,6 +162,7 @@ class SoapEvaluationController extends Controller
             'manual_time_seconds',
             'time_difference_seconds',
             'error_observations',
+            'evaluation_result_type',
             ...SoapEvaluationCalculator::BINARY,
             ...SoapEvaluationCalculator::SOAP,
             'soap_total',
@@ -140,6 +170,7 @@ class SoapEvaluationController extends Controller
             'soap_percentage',
             ...SoapEvaluationCalculator::ERRORS,
             'error_total',
+            'error_totally_wrong_count',
             'error_none_count',
             'error_mild_count',
             'error_moderate_count',
@@ -162,12 +193,14 @@ class SoapEvaluationController extends Controller
 
     private function authorizeEvaluation(Request $request, SoapEvaluation $evaluation, string $permission): void
     {
-        if ($request->user()->can('evaluations.view_all')) return;
+        if ($request->user()->can('evaluations.view_all')) {
+            return;
+        }
         abort_unless($request->user()->can($permission) && $evaluation->evaluator_id === $request->user()->id, 403);
     }
 
     private function load(SoapEvaluation $evaluation): SoapEvaluation
     {
-        return $evaluation->load(['consultation:id,consulted_at', 'evaluator:id,name,specialization']);
+        return $evaluation->load(['consultation:id,consultation_code,consulted_at,recording_duration_seconds,recording_status,upload_status,transcription_status,soap_status,pdf_status,overall_status,failure_stage,failure_code,user_friendly_error_message,expected_segments,received_segments,transcribed_segments', 'processingAttempt', 'evaluator:id,name,specialization']);
     }
 }

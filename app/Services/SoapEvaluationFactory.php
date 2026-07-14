@@ -31,6 +31,7 @@ class SoapEvaluationFactory
 
                     return SoapEvaluation::create([
                         'consultation_id' => $consultation->id,
+                        'processing_attempt_id' => $consultation->currentProcessingAttempt?->id,
                         'evaluator_id' => $user->id,
                         'created_by' => $user->id,
                         'updated_by' => $user->id,
@@ -43,11 +44,14 @@ class SoapEvaluationFactory
                         'consultation_duration_seconds' => data_get($vitalSigns, 'consultation_duration_seconds'),
                         'consultation_duration_source' => data_get($vitalSigns, 'consultation_duration_seconds') !== null ? 'system' : null,
                         'status' => 'pending',
+                        'evaluation_result_type' => $consultation->overall_status === 'failed' ? 'technical_failure' : ($consultation->overall_status === 'completed' ? 'successful_soap' : 'pending_processing'),
                         'last_saved_at' => now(),
                     ]);
                 }, 3);
             } catch (QueryException $exception) {
-                if ($attempt === 2) throw $exception;
+                if ($attempt === 2) {
+                    throw $exception;
+                }
                 usleep(25000 * ($attempt + 1));
             }
         }

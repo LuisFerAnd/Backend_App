@@ -26,6 +26,7 @@ class SoapEvaluationExportController extends Controller
         ]);
 
         $name = 'evaluaciones_soap_'.now()->timezone(config('app.timezone'))->format('Y-m-d_His').'.'.$format;
+
         return response()->download($path, $name)->deleteFileAfterSend(true);
     }
 }

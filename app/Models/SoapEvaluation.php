@@ -9,6 +9,13 @@ class SoapEvaluation extends Model
 {
     protected $guarded = ['id'];
 
+    protected $appends = ['error_scale_version'];
+
+    public function getErrorScaleVersionAttribute(): int
+    {
+        return 2;
+    }
+
     protected function casts(): array
     {
         return [
@@ -21,8 +28,28 @@ class SoapEvaluation extends Model
         ];
     }
 
-    public function consultation(): BelongsTo { return $this->belongsTo(Consultation::class); }
-    public function evaluator(): BelongsTo { return $this->belongsTo(User::class, 'evaluator_id'); }
-    public function creator(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
-    public function updater(): BelongsTo { return $this->belongsTo(User::class, 'updated_by'); }
+    public function consultation(): BelongsTo
+    {
+        return $this->belongsTo(Consultation::class);
+    }
+
+    public function evaluator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'evaluator_id');
+    }
+
+    public function processingAttempt(): BelongsTo
+    {
+        return $this->belongsTo(ConsultationProcessingAttempt::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
 }

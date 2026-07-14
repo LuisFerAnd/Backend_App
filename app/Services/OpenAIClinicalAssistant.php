@@ -168,6 +168,14 @@ Eres un formateador clinico SOAP. Tu unica funcion es reorganizar una transcripc
 Reglas:
 - Responde solo con el JSON solicitado por el esquema.
 - Usa espanol claro y profesional.
+- Antes de llenar el SOAP, separa mentalmente el contenido clinico del contenido ajeno a la consulta.
+- Considera clinico solo lo relacionado con salud, sintomas, antecedentes, medicamentos, alergias, examen fisico, signos vitales, pruebas, valoraciones, diagnosticos, tratamientos, indicaciones o seguimiento.
+- Omite por completo saludos, despedidas, bromas, conversaciones sociales, historias personales no medicas, publicidad, comentarios administrativos, problemas tecnicos y voces de fondo que no aporten informacion clinica.
+- Nunca conviertas contenido no clinico en motivo de consulta, sintomas, antecedentes, assessment ni plan.
+- Si la transcripcion combina contenido clinico y no clinico, usa exclusivamente las frases clinicamente pertinentes.
+- Si no existe ninguna frase clinicamente pertinente, establece has_clinical_content en false y usa exactamente "no especificado" en todos los campos y subcampos del SOAP.
+- Establece has_clinical_content en true solo cuando exista al menos un dato clinico explicito en la transcripcion.
+- No atribuyas una frase al paciente o al medico por el tono de voz, genero o estilo; usa solo atribuciones expresas en el texto.
 - No diagnostiques, no opines, no recomiendes y no hagas inferencias clinicas.
 - No inventes sintomas, signos vitales, antecedentes, resultados, medicamentos, diagnosticos, impresiones ni planes.
 - Copia y organiza solo informacion explicitamente mencionada en la transcripcion.
@@ -212,6 +220,10 @@ PROMPT;
             'type' => 'object',
             'additionalProperties' => false,
             'properties' => [
+                'has_clinical_content' => [
+                    'type' => 'boolean',
+                    'description' => 'True solo si la transcripcion contiene al menos un dato clinico explicito. False si todo el contenido es social, aleatorio, administrativo o ajeno a la salud.',
+                ],
                 'reason' => [
                     'type' => 'string',
                     'description' => 'Motivo principal de consulta en una frase breve, maximo 255 caracteres. Si no fue mencionado, usar "no especificado".',
@@ -273,6 +285,7 @@ PROMPT;
                 ],
             ],
             'required' => [
+                'has_clinical_content',
                 'reason',
                 'subjective',
                 'objective',
@@ -311,6 +324,10 @@ PROMPT;
 
     private function normalizeDraft(array $draft): array
     {
+        if (Arr::get($draft, 'has_clinical_content') === false) {
+            $draft = $this->emptyStructuredDraft();
+        }
+
         if (! $this->hasStructuredSoapSections($draft)) {
             return $this->normalizeLegacyDraft($draft);
         }
@@ -351,6 +368,23 @@ PROMPT;
             ]),
             'vital_signs' => $structured['objective']['vital_signs'],
             'structured' => $structured,
+        ];
+    }
+
+    private function emptyStructuredDraft(): array
+    {
+        return [
+            'has_clinical_content' => false,
+            'reason' => self::UNSPECIFIED,
+            'subjective' => array_fill_keys($this->subjectiveFields(), self::UNSPECIFIED),
+            'objective' => [
+                'physical_exam' => self::UNSPECIFIED,
+                'measurable_findings' => self::UNSPECIFIED,
+                'test_results' => self::UNSPECIFIED,
+                'vital_signs' => array_fill_keys($this->vitalSignFields(), self::UNSPECIFIED),
+            ],
+            'assessment' => array_fill_keys($this->assessmentFields(), self::UNSPECIFIED),
+            'plan' => array_fill_keys($this->planFields(), self::UNSPECIFIED),
         ];
     }
 
@@ -465,6 +499,7 @@ PROMPT;
 
             if ($this->isUnspecified($value)) {
                 $lines[] = "{$label}: ".self::UNSPECIFIED;
+
                 continue;
             }
 
@@ -472,6 +507,7 @@ PROMPT;
 
             if (count($items) === 1) {
                 $lines[] = "{$label}: {$items[0]}";
+
                 continue;
             }
 

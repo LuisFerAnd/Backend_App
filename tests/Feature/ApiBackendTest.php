@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\OpenAIClinicalAssistant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -12,6 +13,44 @@ use Tests\TestCase;
 class ApiBackendTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_non_clinical_conversation_is_excluded_from_the_soap(): void
+    {
+        config(['services.openai.key' => 'test-openai-key']);
+        Http::fake([
+            'api.openai.com/v1/responses' => Http::response([
+                'output_text' => json_encode([
+                    'has_clinical_content' => false,
+                    'reason' => 'Partido de futbol',
+                    'subjective' => 'El equipo gano ayer.',
+                    'objective' => 'Marcador dos a cero.',
+                    'assessment' => 'Fue un buen partido.',
+                    'plan' => 'Ver el siguiente partido.',
+                    'vital_signs' => [],
+                ]),
+                'usage' => ['input_tokens' => 100, 'output_tokens' => 50],
+            ]),
+        ]);
+
+        $result = app(OpenAIClinicalAssistant::class)->draftConsultation(
+            'Ayer vimos el partido y luego hablamos de una pelicula.'
+        );
+
+        $this->assertSame('no especificado', $result['draft']['reason']);
+        $this->assertStringNotContainsString('partido', strtolower($result['draft']['subjective']));
+        $this->assertStringNotContainsString('partido', strtolower($result['draft']['assessment']));
+        $this->assertStringNotContainsString('partido', strtolower($result['draft']['plan']));
+
+        Http::assertSent(function ($request): bool {
+            $systemPrompt = data_get($request->data(), 'input.0.content.0.text', '');
+            $schema = data_get($request->data(), 'text.format.schema', []);
+
+            return str_contains($systemPrompt, 'Omite por completo saludos')
+                && str_contains($systemPrompt, 'has_clinical_content en false')
+                && data_get($schema, 'properties.has_clinical_content.type') === 'boolean'
+                && in_array('has_clinical_content', data_get($schema, 'required', []), true);
+        });
+    }
 
     public function test_doctor_can_register_create_patient_and_register_soap_consultation(): void
     {
@@ -95,7 +134,7 @@ class ApiBackendTest extends TestCase
             ->postJson('/api/patients', [
                 'first_name' => 'Pedro',
                 'last_name' => 'Alvarez',
-                'dni' => '0801199012345',
+                'dni' => '0801199012346',
             ])
             ->assertCreated();
 
@@ -112,6 +151,37 @@ class ApiBackendTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'patients')
             ->assertJsonPath('patients.0.first_name', 'Pedro');
+    }
+
+    public function test_dni_cannot_belong_to_two_different_patients(): void
+    {
+        $firstDoctorToken = $this->postJson('/api/doctors/register', [
+            'name' => 'Dra. Ana Lopez',
+            'email' => 'ana-unique@example.test',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->json('token');
+        $secondDoctorToken = $this->postJson('/api/doctors/register', [
+            'name' => 'Dr. Jose Rivera',
+            'email' => 'jose-unique@example.test',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->json('token');
+
+        $this->withToken($firstDoctorToken)->postJson('/api/patients', [
+            'first_name' => 'Carlos',
+            'last_name' => 'Martinez',
+            'dni' => '0801-1990-12345',
+        ])->assertCreated()->assertJsonPath('patient.dni', '0801199012345');
+
+        $this->withToken($secondDoctorToken)->postJson('/api/patients', [
+            'first_name' => 'Pedro',
+            'last_name' => 'Alvarez',
+            'dni' => '0801199012345',
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.dni.0', 'Este DNI ya está registrado para otro paciente.');
+
+        $this->assertDatabaseCount('patients', 1);
     }
 
     public function test_admin_can_see_all_records_and_doctor_cannot_use_admin_routes(): void

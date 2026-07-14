@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AiConsultationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConsultationController;
 use App\Http\Controllers\Api\PatientController;
+use App\Http\Controllers\Api\SegmentedConsultationController;
 use App\Http\Controllers\Api\SoapEvaluationController;
 use App\Http\Controllers\Api\SoapEvaluationExportController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,15 @@ Route::middleware('doctor.auth')->group(function (): void {
     Route::apiResource('patients', PatientController::class)->except(['destroy']);
     Route::get('/consultations/costs/export', [ConsultationController::class, 'exportCosts'])
         ->middleware('admin');
+    Route::post('/consultations/start', [SegmentedConsultationController::class, 'start']);
+    Route::post('/consultations/{consultation}/segments', [SegmentedConsultationController::class, 'uploadSegment']);
+    Route::post('/consultations/{consultation}/finalize', [SegmentedConsultationController::class, 'finalize']);
+    Route::get('/consultations/{consultation}/processing-status', [SegmentedConsultationController::class, 'status']);
+    Route::get('/consultations/{consultation}/missing-segments', [SegmentedConsultationController::class, 'missingSegments']);
+    Route::post('/consultations/{consultation}/segments/{segment}/retry-transcription', [SegmentedConsultationController::class, 'retryTranscription']);
+    Route::post('/consultations/{consultation}/retry-processing', [SegmentedConsultationController::class, 'retryProcessing']);
+    Route::post('/consultations/{consultation}/cancel-processing', [SegmentedConsultationController::class, 'cancelProcessing']);
+    Route::post('/consultations/{consultation}/failure', [SegmentedConsultationController::class, 'reportFailure']);
     Route::apiResource('consultations', ConsultationController::class)->except(['destroy']);
     Route::post('/ai/transcriptions', [AiConsultationController::class, 'transcribe']);
     Route::post('/ai/consultation-draft', [AiConsultationController::class, 'draft']);

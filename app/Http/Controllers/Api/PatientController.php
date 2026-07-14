@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Patient;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class PatientController extends Controller
 {
@@ -23,6 +25,7 @@ class PatientController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->normalizeDni($request);
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:120'],
             'last_name' => ['required', 'string', 'max:120'],
@@ -30,15 +33,18 @@ class PatientController extends Controller
                 'required',
                 'string',
                 'max:30',
-                Rule::unique('patients', 'dni')
-                    ->where(fn ($query) => $query->where('doctor_id', $request->user()->id)),
+                Rule::unique('patients', 'dni'),
             ],
-        ]);
+        ], $this->validationMessages());
 
-        $patient = Patient::create([
-            ...$data,
-            'doctor_id' => $request->user()->id,
-        ]);
+        try {
+            $patient = Patient::create([
+                ...$data,
+                'doctor_id' => $request->user()->id,
+            ]);
+        } catch (QueryException $exception) {
+            $this->throwDniConflict($exception);
+        }
 
         return response()->json([
             'patient' => $patient,
@@ -57,6 +63,7 @@ class PatientController extends Controller
     public function update(Request $request, Patient $patient): JsonResponse
     {
         $this->ensurePatientBelongsToDoctor($request, $patient);
+        $this->normalizeDni($request);
 
         $data = $request->validate([
             'first_name' => ['sometimes', 'required', 'string', 'max:120'],
@@ -66,13 +73,15 @@ class PatientController extends Controller
                 'required',
                 'string',
                 'max:30',
-                Rule::unique('patients', 'dni')
-                    ->where(fn ($query) => $query->where('doctor_id', $request->user()->id))
-                    ->ignore($patient),
+                Rule::unique('patients', 'dni')->ignore($patient),
             ],
-        ]);
+        ], $this->validationMessages());
 
-        $patient->update($data);
+        try {
+            $patient->update($data);
+        } catch (QueryException $exception) {
+            $this->throwDniConflict($exception);
+        }
 
         return response()->json([
             'patient' => $patient,
@@ -82,5 +91,33 @@ class PatientController extends Controller
     private function ensurePatientBelongsToDoctor(Request $request, Patient $patient): void
     {
         abort_if($patient->doctor_id !== $request->user()->id, 404);
+    }
+
+    private function normalizeDni(Request $request): void
+    {
+        if (! $request->has('dni')) {
+            return;
+        }
+
+        $dni = strtoupper(trim((string) $request->input('dni')));
+        $request->merge(['dni' => preg_replace('/[\s-]+/', '', $dni)]);
+    }
+
+    private function validationMessages(): array
+    {
+        return [
+            'dni.unique' => 'Este DNI ya está registrado para otro paciente.',
+        ];
+    }
+
+    private function throwDniConflict(QueryException $exception): never
+    {
+        if (in_array((string) ($exception->errorInfo[0] ?? ''), ['23000', '23505'], true)) {
+            throw ValidationException::withMessages([
+                'dni' => 'Este DNI ya está registrado para otro paciente.',
+            ]);
+        }
+
+        throw $exception;
     }
 }
