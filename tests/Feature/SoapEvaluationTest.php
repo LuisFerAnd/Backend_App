@@ -49,7 +49,7 @@ class SoapEvaluationTest extends TestCase
     {
         $data = ['manual_time_seconds' => 600, 'ai_time_seconds' => 125];
         foreach (SoapEvaluationCalculator::SOAP as $key) {
-            $data[$key] = 2;
+            $data[$key] = 3;
         }
         foreach (SoapEvaluationCalculator::ERRORS as $index => $key) {
             $data[$key] = [1, 2, 2, 3, 4, 5][$index];
@@ -63,7 +63,7 @@ class SoapEvaluationTest extends TestCase
 
         $result = app(SoapEvaluationCalculator::class)->calculate($data);
         $this->assertSame(475, $result['time_difference_seconds']);
-        $this->assertSame(12, $result['soap_total']);
+        $this->assertSame(18, $result['soap_total']);
         $this->assertSame(100.0, $result['soap_percentage']);
         $this->assertSame(17, $result['error_total']);
         $this->assertSame([1, 2, 1, 1, 1], [$result['error_totally_wrong_count'], $result['error_severe_count'], $result['error_moderate_count'], $result['error_mild_count'], $result['error_none_count']]);
@@ -90,7 +90,7 @@ class SoapEvaluationTest extends TestCase
             $complete[$field] = 1;
         }
         foreach (SoapEvaluationCalculator::SOAP as $field) {
-            $complete[$field] = 2;
+            $complete[$field] = 3;
         }
         foreach (SoapEvaluationCalculator::ERRORS as $field) {
             $complete[$field] = 5;

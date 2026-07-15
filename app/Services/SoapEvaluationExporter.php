@@ -70,9 +70,9 @@ class SoapEvaluationExporter
             'generacion_soap' => ['Generación SOAP', 'integer', '0=No; 1=Sí', 'I'],
         ];
         foreach (['soap_subjetivo', 'soap_objetivo', 'soap_evaluacion', 'soap_plan', 'soap_ubicacion', 'soap_claridad'] as $key) {
-            $variables[$key] = [ucwords(str_replace('_', ' ', $key)), 'integer', '0=No cumple; 1=Parcial; 2=Cumple; 98 en SAV o vacío en CSV/XLSX=No aplica', 'III'];
+            $variables[$key] = [ucwords(str_replace('_', ' ', $key)), 'integer', '1=No cumple; 2=Parcial; 3=Cumple; 98 en SAV o vacío en CSV/XLSX=No aplica', 'III'];
         }
-        $variables += ['soap_total' => ['Puntaje SOAP', 'integer', '0-12', 'III'], 'soap_porcentaje' => ['Porcentaje SOAP', 'decimal', 'porcentaje', 'III']];
+        $variables += ['soap_total' => ['Puntaje SOAP', 'integer', '6-18', 'III'], 'soap_porcentaje' => ['Porcentaje SOAP', 'decimal', 'porcentaje normalizado (6=0%; 18=100%)', 'III']];
         foreach (['err_transcripcion', 'err_omision', 'err_agregada', 'err_confusion', 'err_ubicacion', 'err_redaccion'] as $key) {
             $variables[$key] = [ucwords(str_replace('_', ' ', $key)), 'integer', '1=Totalmente erróneo; 2=Grave; 3=Moderado; 4=Leve; 5=No presenta; 98 en SAV o vacío en CSV/XLSX=No aplica', 'IV'];
         }
@@ -243,7 +243,7 @@ class SoapEvaluationExporter
             return [0 => 'No', 1 => 'Sí'];
         }
         if (preg_match('/^soap_(subjetivo|objetivo|evaluacion|plan|ubicacion|claridad)$/', $name)) {
-            return [0 => 'No cumple', 1 => 'Cumple parcialmente', 2 => 'Cumple', 98 => 'No aplica: no se generó SOAP'];
+            return [1 => 'No cumple', 2 => 'Cumple parcialmente', 3 => 'Cumple', 98 => 'No aplica: no se generó SOAP'];
         }
         if (preg_match('/^err_(transcripcion|omision|agregada|confusion|ubicacion|redaccion)$/', $name)) {
             return [1 => 'Totalmente erróneo', 2 => 'Error grave', 3 => 'Error moderado', 4 => 'Error leve', 5 => 'No presenta', 98 => 'No aplica: no se generó SOAP'];

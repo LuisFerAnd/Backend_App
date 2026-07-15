@@ -21,10 +21,10 @@ class SoapEvaluationCalculator
             $data['time_difference_seconds'] = (int) $data['manual_time_seconds'] - (int) $data['ai_time_seconds'];
         }
 
-        if ($this->allPresent($data, self::SOAP) && collect(self::SOAP)->every(fn (string $key) => in_array((int) $data[$key], [0, 1, 2], true))) {
+        if ($this->allPresent($data, self::SOAP) && collect(self::SOAP)->every(fn (string $key) => in_array((int) $data[$key], [1, 2, 3], true))) {
             $data['soap_total'] = $this->sum($data, self::SOAP);
-            $data['soap_max'] = 12;
-            $data['soap_percentage'] = round(($data['soap_total'] / 12) * 100, 2);
+            $data['soap_max'] = 18;
+            $data['soap_percentage'] = round((($data['soap_total'] - 6) / 12) * 100, 2);
         }
 
         if ($this->allPresent($data, self::ERRORS) && collect(self::ERRORS)->every(fn (string $key) => in_array((int) $data[$key], [1, 2, 3, 4, 5], true))) {

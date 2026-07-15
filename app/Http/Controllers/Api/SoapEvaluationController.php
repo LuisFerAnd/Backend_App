@@ -72,7 +72,7 @@ class SoapEvaluationController extends Controller
             $data['evaluation_result_type'] ??= $evaluation->consultation?->overall_status === 'cancelled' ? 'cancelled_by_user' : 'technical_failure';
         } else {
             $hasSoapDeficiencies = collect(SoapEvaluationCalculator::SOAP)
-                ->contains(fn (string $field) => isset($data[$field]) && (int) $data[$field] < 2);
+                ->contains(fn (string $field) => isset($data[$field]) && (int) $data[$field] < 3);
             $data['evaluation_result_type'] ??= $hasSoapDeficiencies ? 'soap_with_errors' : 'successful_soap';
         }
         $merged = $calculator->calculate([...$evaluation->toArray(), ...$data]);
@@ -142,7 +142,7 @@ class SoapEvaluationController extends Controller
             $rules[$field] = ['nullable', Rule::in([0, 1])];
         }
         foreach (SoapEvaluationCalculator::SOAP as $field) {
-            $rules[$field] = ['nullable', Rule::in([0, 1, 2, 98])];
+            $rules[$field] = ['nullable', Rule::in([1, 2, 3, 98])];
         }
         foreach (SoapEvaluationCalculator::ERRORS as $field) {
             $rules[$field] = ['nullable', Rule::in([1, 2, 3, 4, 5, 98])];

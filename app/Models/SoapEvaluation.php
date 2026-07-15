@@ -9,9 +9,14 @@ class SoapEvaluation extends Model
 {
     protected $guarded = ['id'];
 
-    protected $appends = ['error_scale_version'];
+    protected $appends = ['error_scale_version', 'soap_scale_version'];
 
     public function getErrorScaleVersionAttribute(): int
+    {
+        return 2;
+    }
+
+    public function getSoapScaleVersionAttribute(): int
     {
         return 2;
     }
