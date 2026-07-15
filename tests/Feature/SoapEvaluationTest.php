@@ -63,6 +63,9 @@ class SoapEvaluationTest extends TestCase
 
         $result = app(SoapEvaluationCalculator::class)->calculate($data);
         $this->assertSame(475, $result['time_difference_seconds']);
+        $this->assertSame(475.0, $result['time_difference_seconds_exact']);
+        $this->assertSame(1, $result['manual_time_range']);
+        $this->assertSame('Muy lento', $result['manual_time_label']);
         $this->assertSame(18, $result['soap_total']);
         $this->assertSame(100.0, $result['soap_percentage']);
         $this->assertSame(17, $result['error_total']);
@@ -115,6 +118,7 @@ class SoapEvaluationTest extends TestCase
         $evaluation = app(SoapEvaluationFactory::class)->firstOrCreate($consultation, $doctor);
         $evaluation->update([
             'status' => 'completed',
+            'audio_duration_seconds' => null,
             'error_transcription' => 5,
             'error_omission' => 5,
             'error_added' => 5,
@@ -125,6 +129,7 @@ class SoapEvaluationTest extends TestCase
             'error_totally_wrong_count' => 0,
             'error_none_count' => 6,
         ]);
+        $consultation->update(['recording_duration_seconds' => 85]);
         $admin = User::factory()->create();
         $admin->assignRole('admin');
         $token = $this->login($admin);
@@ -132,6 +137,14 @@ class SoapEvaluationTest extends TestCase
         $csv = $this->withToken($token)->get('/api/admin/soap-evaluations/export/csv?status=completed')->assertOk();
         $this->assertStringContainsString('codigo_prueba', $csv->streamedContent());
         $this->assertStringNotContainsString($consultation->patient->dni, $csv->streamedContent());
+        $this->assertStringNotContainsString('creado_en', $csv->streamedContent());
+        $this->assertStringNotContainsString('actualizado_en', $csv->streamedContent());
+        $this->assertStringNotContainsString('completado_en', $csv->streamedContent());
+        $this->assertStringNotContainsString('observacion_profesional', $csv->streamedContent());
+        $csvRows = array_map('str_getcsv', preg_split('/\R/', trim($csv->streamedContent())));
+        $csvHeaders = array_flip($csvRows[0]);
+        $this->assertSame('85', $csvRows[1][$csvHeaders['audio_duracion_seg']]);
+        $this->assertSame('12', $csvRows[1][$csvHeaders['ia_tiempo_seg']]);
 
         $xlsx = $this->withToken($token)->get('/api/admin/soap-evaluations/export/xlsx?status=completed')->assertOk();
         $path = tempnam(sys_get_temp_dir(), 'xlsx');
@@ -140,7 +153,10 @@ class SoapEvaluationTest extends TestCase
         unlink($path);
         $this->assertSame(['Datos', 'Diccionario'], $book->getSheetNames());
         $sheet = $book->getSheetByName('Datos');
-        $headers = array_flip($sheet->rangeToArray('A1:AZ1')[0]);
+        $headers = array_flip(array_filter(
+            $sheet->rangeToArray('A1:BZ1')[0],
+            static fn ($value): bool => is_string($value) && $value !== ''
+        ));
         $this->assertSame(5, $sheet->getCell([$headers['err_transcripcion'] + 1, 2])->getValue());
         $this->assertSame(30, $sheet->getCell([$headers['err_total'] + 1, 2])->getValue());
         $this->assertSame(0, $sheet->getCell([$headers['err_totalmente_erroneos'] + 1, 2])->getValue());

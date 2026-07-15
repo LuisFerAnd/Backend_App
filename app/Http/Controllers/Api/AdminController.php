@@ -54,7 +54,7 @@ class AdminController extends Controller
     {
         $perPage = $this->perPage($request);
         $status = $request->validate([
-            'overall_status' => ['nullable', 'string', 'in:created,recording,recording_completed,uploading,transcribing,generating_soap,completed,completed_with_warnings,failed,cancelled,pending_sync'],
+            'overall_status' => ['nullable', 'string', 'in:created,recording,recording_completed,uploading,transcribing,generating_soap,completed,completed_with_warnings,failed,timeout,cancelled,pending_sync'],
             'failure_stage' => ['nullable', 'string', 'max:40'],
         ]);
 

@@ -39,7 +39,6 @@ class GenerateSoapJob implements ShouldQueue
             'soap_status' => 'processing',
             'soap_error' => null,
         ]);
-        app(ConsultationAttemptTracker::class)->complete($consultation->fresh());
         $result = $assistant->draftConsultation(
             (string) $consultation->transcription_text,
             $consultation->patient
@@ -67,6 +66,7 @@ class GenerateSoapJob implements ShouldQueue
             'soap_status' => 'completed',
             'soap_error' => null,
         ]);
+        app(ConsultationAttemptTracker::class)->complete($consultation->fresh());
 
         Log::info('Segmented consultation SOAP completed.', [
             'consultation_id' => $consultation->id,
@@ -82,17 +82,19 @@ class GenerateSoapJob implements ShouldQueue
         if (! $consultation) {
             return;
         }
+        $isTimeout = str_contains(strtolower($exception::class.' '.$exception->getMessage()), 'timeout');
         $consultation->update([
-            'processing_status' => 'failed',
+            'processing_status' => $isTimeout ? 'timeout' : 'failed',
             'soap_status' => 'failed',
             'soap_error' => $exception::class,
         ]);
         app(ConsultationAttemptTracker::class)->fail(
             $consultation,
             'soap_generation',
-            class_basename($exception),
+            $isTimeout ? 'OPENAI_TIMEOUT' : class_basename($exception),
             $exception::class,
-            'No se pudo generar el registro SOAP. La consulta quedó registrada y puede evaluarse o procesarse nuevamente.'
+            'No se pudo generar el registro SOAP. La consulta quedó registrada y puede evaluarse o procesarse nuevamente.',
+            $isTimeout ? 'timeout' : 'failed',
         );
         Log::error('Segmented consultation SOAP failed.', [
             'consultation_id' => $this->consultationId,

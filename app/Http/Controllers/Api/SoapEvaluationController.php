@@ -40,8 +40,9 @@ class SoapEvaluationController extends Controller
         $data = $request->validate($this->rules());
         $expectedVersion = (int) $data['version'];
         unset($data['version']);
+        $evaluation->loadMissing('consultation');
         $data = $this->writableData(
-            $calculator->calculate([...$evaluation->toArray(), ...$data])
+            $calculator->calculate($this->withOfficialPrototypeTime($evaluation, $data))
         );
         $data['status'] = 'draft';
         $data['updated_by'] = $request->user()->id;
@@ -83,7 +84,7 @@ class SoapEvaluationController extends Controller
                 ->contains(fn (string $field) => isset($data[$field]) && (int) $data[$field] < 3);
             $data['evaluation_result_type'] ??= $hasSoapDeficiencies ? 'soap_with_errors' : 'successful_soap';
         }
-        $merged = $calculator->calculate([...$evaluation->toArray(), ...$data]);
+        $merged = $calculator->calculate($this->withOfficialPrototypeTime($evaluation, $data));
         $missing = collect($calculator->requiredFields($soapGenerated))->filter(fn (string $key) => ! array_key_exists($key, $merged) || $merged[$key] === null)->values();
         if ($missing->isNotEmpty()) {
             throw ValidationException::withMessages(['required_fields' => ['Faltan respuestas obligatorias: '.$missing->join(', ')]]);
@@ -126,7 +127,7 @@ class SoapEvaluationController extends Controller
 
     public function filteredQuery(array $filters)
     {
-        return SoapEvaluation::query()->with(['consultation:id,consultation_code,consulted_at,recording_duration_seconds,recording_status,upload_status,transcription_status,soap_status,pdf_status,overall_status,failure_stage,failure_code,user_friendly_error_message,expected_segments,received_segments,transcribed_segments', 'processingAttempt', 'evaluator:id,name,specialization'])
+        return SoapEvaluation::query()->with(['consultation:id,consultation_code,consulted_at,recording_duration_seconds,recording_status,upload_status,transcription_status,soap_status,pdf_status,overall_status,failure_stage,failure_code,user_friendly_error_message,expected_segments,received_segments,transcribed_segments,processing_started_at,processing_finished_at,processing_time_ms,processing_time_seconds,processing_time_range,processing_time_label,processing_status,error_code,error_message,error_stage,retry_count,soap_generated', 'processingAttempt', 'evaluator:id,name,specialization'])
             ->when($filters['search'] ?? null, fn ($q, $v) => $q->where(fn ($inner) => $inner->where('test_code', 'like', "%$v%")->orWhere('evaluator_name', 'like', "%$v%")->orWhere('evaluator_specialization', 'like', "%$v%")))
             ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->when($filters['overall_status'] ?? null, fn ($q, $v) => $q->whereHas('consultation', fn ($c) => $c->where('overall_status', $v)))
@@ -140,7 +141,7 @@ class SoapEvaluationController extends Controller
 
     public function filterRules(): array
     {
-        return ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', Rule::in(['pending', 'draft', 'completed', 'provisional'])], 'overall_status' => ['nullable', Rule::in(['created', 'recording', 'recording_completed', 'uploading', 'transcribing', 'generating_soap', 'completed', 'completed_with_warnings', 'failed', 'cancelled', 'pending_sync'])], 'evaluation_id' => ['nullable', 'integer', 'exists:soap_evaluations,id'], 'evaluator_id' => ['nullable', 'integer'], 'specialization' => ['nullable', 'string', 'max:255'], 'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'], 'sort' => ['nullable', Rule::in(['test_date', 'test_code'])], 'direction' => ['nullable', Rule::in(['asc', 'desc'])]];
+        return ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', Rule::in(['pending', 'draft', 'completed', 'provisional'])], 'overall_status' => ['nullable', Rule::in(['created', 'recording', 'recording_completed', 'uploading', 'transcribing', 'generating_soap', 'completed', 'completed_with_warnings', 'failed', 'timeout', 'cancelled', 'pending_sync'])], 'evaluation_id' => ['nullable', 'integer', 'exists:soap_evaluations,id'], 'evaluator_id' => ['nullable', 'integer'], 'specialization' => ['nullable', 'string', 'max:255'], 'date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'], 'sort' => ['nullable', Rule::in(['test_date', 'test_code'])], 'direction' => ['nullable', Rule::in(['asc', 'desc'])]];
     }
 
     private function rules(): array
@@ -168,7 +169,10 @@ class SoapEvaluationController extends Controller
             'consultation_duration_seconds',
             'consultation_duration_source',
             'manual_time_seconds',
+            'manual_time_range',
+            'manual_time_label',
             'time_difference_seconds',
+            'time_difference_seconds_exact',
             'error_observations',
             'evaluation_result_type',
             ...SoapEvaluationCalculator::BINARY,
@@ -199,6 +203,22 @@ class SoapEvaluationController extends Controller
         abort_if(! $request->user()->hasRole('admin') && $consultation->doctor_id !== $request->user()->id, 404);
     }
 
+    private function withOfficialPrototypeTime(SoapEvaluation $evaluation, array $data): array
+    {
+        $prototypeSeconds = $evaluation->consultation?->processing_time_seconds;
+
+        return [
+            ...$evaluation->toArray(),
+            ...$data,
+            'ai_time_seconds' => $prototypeSeconds === null
+                ? $evaluation->ai_time_seconds
+                : (int) round((float) $prototypeSeconds),
+            'prototype_time_seconds' => $prototypeSeconds === null
+                ? $evaluation->ai_time_seconds
+                : (float) $prototypeSeconds,
+        ];
+    }
+
     private function authorizeEvaluation(Request $request, SoapEvaluation $evaluation, string $permission): void
     {
         if ($request->user()->can('evaluations.view_all')) {
@@ -209,6 +229,6 @@ class SoapEvaluationController extends Controller
 
     private function load(SoapEvaluation $evaluation): SoapEvaluation
     {
-        return $evaluation->load(['consultation:id,consultation_code,consulted_at,recording_duration_seconds,recording_status,upload_status,transcription_status,soap_status,pdf_status,overall_status,failure_stage,failure_code,user_friendly_error_message,expected_segments,received_segments,transcribed_segments', 'processingAttempt', 'evaluator:id,name,specialization']);
+        return $evaluation->load(['consultation:id,consultation_code,consulted_at,recording_duration_seconds,recording_status,upload_status,transcription_status,soap_status,pdf_status,overall_status,failure_stage,failure_code,user_friendly_error_message,expected_segments,received_segments,transcribed_segments,processing_started_at,processing_finished_at,processing_time_ms,processing_time_seconds,processing_time_range,processing_time_label,processing_status,error_code,error_message,error_stage,retry_count,soap_generated', 'processingAttempt', 'evaluator:id,name,specialization']);
     }
 }

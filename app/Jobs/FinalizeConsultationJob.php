@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Consultation;
 use App\Models\ConsultationAudioSegment;
+use App\Services\ConsultationAttemptTracker;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -33,12 +34,15 @@ class FinalizeConsultationJob implements ShouldQueue
             ->all();
         $required = $expected > 0 ? range(1, $expected) : [];
 
+        $audioDuration = (int) $consultation->audioSegments()->sum('duration_seconds');
         $consultation->update([
             'received_segments' => count($numbers),
             'transcribed_segments' => $consultation->audioSegments()
                 ->where('transcription_status', 'completed')
                 ->count(),
+            'recording_duration_seconds' => $audioDuration,
         ]);
+        $consultation->soapEvaluation()->update(['audio_duration_seconds' => $audioDuration]);
         $consultation->refresh();
 
         if ($required === [] || $numbers !== $required) {
@@ -48,6 +52,13 @@ class FinalizeConsultationJob implements ShouldQueue
         }
         if ($consultation->audioSegments()->where('transcription_status', 'failed')->exists()) {
             $consultation->update(['processing_status' => 'failed', 'transcription_status' => 'failed', 'overall_status' => 'failed']);
+            app(ConsultationAttemptTracker::class)->fail(
+                $consultation->fresh(),
+                'transcription',
+                'TRANSCRIPTION_SEGMENT_FAILED',
+                'Uno o más segmentos no pudieron transcribirse.',
+                'La consulta fue registrada, pero el SOAP no pudo generarse.'
+            );
 
             return;
         }

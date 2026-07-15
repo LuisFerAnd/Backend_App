@@ -10,6 +10,7 @@ use App\Models\Consultation;
 use App\Models\ConsultationAudioSegment;
 use App\Models\Patient;
 use App\Services\ConsultationAttemptTracker;
+use App\Services\ProcessingTimeService;
 use App\Services\SoapEvaluationFactory;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -210,7 +211,7 @@ class SegmentedConsultationController extends Controller
         return $this->segmentResponse($segment, duplicate: false);
     }
 
-    public function finalize(Request $request, Consultation $consultation): JsonResponse
+    public function finalize(Request $request, Consultation $consultation, ProcessingTimeService $processingTime): JsonResponse
     {
         $this->authorizeConsultation($request, $consultation);
         if ($consultation->processing_status === 'cancelled') {
@@ -251,6 +252,7 @@ class SegmentedConsultationController extends Controller
         $processingStatus = in_array($transcriptionStatus, ['queued', 'processing'], true)
             ? 'transcribing'
             : 'waiting_segments';
+        $consultation = $processingTime->startProcessing($consultation);
         $consultation->update([
             'recording_status' => 'finished',
             'upload_status' => $consultation->received_segments >= $data['expected_segments'] ? 'completed' : 'uploading',
@@ -269,6 +271,7 @@ class SegmentedConsultationController extends Controller
             'success' => true,
             'status' => 'processing',
             'message' => 'La consulta está siendo procesada',
+            ...$this->processingTimePayload($consultation->fresh()),
         ], 202);
     }
 
@@ -280,7 +283,7 @@ class SegmentedConsultationController extends Controller
         $pending = max(0, (int) ($consultation->expected_segments ?? $consultation->received_segments) - $consultation->transcribed_segments);
 
         return response()->json([
-            'success' => true,
+            'success' => ! in_array($consultation->processing_status, ['failed', 'timeout'], true),
             'consultation_id' => $consultation->id,
             'consultation_code' => $consultation->consultation_code,
             'session_uuid' => $consultation->session_uuid,
@@ -300,10 +303,16 @@ class SegmentedConsultationController extends Controller
             'failure_stage' => $consultation->failure_stage,
             'failure_code' => $consultation->failure_code,
             'failure_message' => $consultation->user_friendly_error_message,
+            'error_code' => $consultation->error_code,
+            'error_stage' => $consultation->error_stage,
+            'error_message' => $consultation->error_message,
+            'retry_count' => $consultation->retry_count,
+            'soap_generated' => $consultation->soap_generated,
+            ...$this->processingTimePayload($consultation),
             'is_evaluable' => $consultation->is_evaluable,
             'progress_percentage' => $this->progress($consultation),
-            'message' => $consultation->processing_status === 'failed'
-                ? ($consultation->user_friendly_error_message ?? 'El procesamiento falló. La consulta y sus fragmentos fueron conservados.')
+            'message' => in_array($consultation->processing_status, ['failed', 'timeout'], true)
+                ? 'La consulta fue registrada, pero el SOAP no pudo generarse. Puede evaluarse posteriormente.'
                 : $this->statusMessage($consultation->processing_status),
             'soap' => $consultation->processing_status === 'completed' ? [
                 'reason' => $consultation->reason,
@@ -391,15 +400,16 @@ class SegmentedConsultationController extends Controller
 
         $consultation->update([
             'processing_status' => 'cancelled',
-            'overall_status' => 'cancelled',
             'recording_status' => 'finished',
             'finished_at' => $consultation->finished_at ?? now(),
         ]);
+        app(ConsultationAttemptTracker::class)->cancel($consultation->fresh());
 
         return response()->json([
             'success' => true,
             'status' => 'cancelled',
             'message' => 'El procesamiento fue cancelado.',
+            ...$this->processingTimePayload($consultation->fresh()),
         ]);
     }
 
@@ -449,7 +459,7 @@ class SegmentedConsultationController extends Controller
         if ($consultation->processing_status === 'completed') {
             return 100;
         }
-        if ($consultation->processing_status === 'failed') {
+        if (in_array($consultation->processing_status, ['failed', 'timeout'], true)) {
             return 0;
         }
         if ($consultation->processing_status === 'generating_soap') {
@@ -476,9 +486,24 @@ class SegmentedConsultationController extends Controller
             'generating_soap' => 'Generando registro SOAP',
             'completed' => 'Registro SOAP generado correctamente',
             'failed' => 'No se pudo completar el procesamiento',
+            'timeout' => 'Se alcanzó el tiempo máximo de procesamiento',
             'cancelled' => 'Procesamiento cancelado',
             default => 'Procesando consulta',
         };
+    }
+
+    private function processingTimePayload(Consultation $consultation): array
+    {
+        return [
+            'processing_started_at' => $consultation->processing_started_at?->toIso8601String(),
+            'processing_finished_at' => $consultation->processing_finished_at?->toIso8601String(),
+            'processing_time_ms' => $consultation->processing_time_ms,
+            'processing_time_seconds' => $consultation->processing_time_seconds === null
+                ? null
+                : (float) $consultation->processing_time_seconds,
+            'processing_time_range' => $consultation->processing_time_range,
+            'processing_time_label' => $consultation->processing_time_label,
+        ];
     }
 
     private function logContext(ConsultationAudioSegment $segment): array

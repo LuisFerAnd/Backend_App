@@ -30,6 +30,8 @@ class SoapEvaluation extends Model
             'soap_percentage' => 'decimal:2',
             'utility_average' => 'decimal:2',
             'ease_average' => 'decimal:2',
+            'manual_time_range' => 'integer',
+            'time_difference_seconds_exact' => 'decimal:3',
         ];
     }
 

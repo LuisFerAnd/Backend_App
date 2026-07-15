@@ -40,7 +40,9 @@ class SoapEvaluationFactory
                         'evaluator_name' => $user->name,
                         'evaluator_specialization' => $user->specialization,
                         'audio_duration_seconds' => data_get($vitalSigns, 'audio_duration_seconds'),
-                        'ai_time_seconds' => data_get($vitalSigns, 'ai_generation_seconds'),
+                        'ai_time_seconds' => $consultation->processing_time_seconds === null
+                            ? data_get($vitalSigns, 'ai_generation_seconds')
+                            : (int) round((float) $consultation->processing_time_seconds),
                         'consultation_duration_seconds' => data_get($vitalSigns, 'consultation_duration_seconds'),
                         'consultation_duration_source' => data_get($vitalSigns, 'consultation_duration_seconds') !== null ? 'system' : null,
                         'status' => 'pending',

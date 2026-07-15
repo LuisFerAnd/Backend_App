@@ -49,9 +49,18 @@ class SoapEvaluationExporter
             'evaluador_especialidad' => ['Especialidad del evaluador', 'string', '', 'Identificación'],
             'consulta_duracion_seg' => ['Duración de consulta', 'integer', 'segundos', 'Identificación'],
             'audio_duracion_seg' => ['Duración del audio', 'integer', 'segundos', 'Identificación'],
-            'ia_tiempo_seg' => ['Tiempo del prototipo', 'integer', 'segundos', 'Tiempo'],
+            'ia_tiempo_seg' => ['Tiempo exacto del prototipo', 'decimal', 'segundos', 'Tiempo'],
+            'tiempo_procesamiento_seg' => ['Tiempo exacto de procesamiento', 'decimal', 'segundos', 'Tiempo'],
+            'tiempo_procesamiento_ms' => ['Tiempo exacto de procesamiento', 'integer', 'milisegundos', 'Tiempo'],
+            'rango_tiempo_codigo' => ['Rango ordinal del tiempo', 'integer', '1=Muy lento; 2=Lento; 3=Moderado; 4=Rápido; 5=Muy rápido', 'Tiempo'],
+            'rango_tiempo_etiqueta' => ['Etiqueta del rango de tiempo', 'string', '', 'Tiempo'],
+            'estado_procesamiento' => ['Estado del procesamiento', 'string', 'pending|processing|completed|failed|timeout|cancelled', 'Auditoría'],
+            'numero_reintentos' => ['Número de reintentos', 'integer', '', 'Auditoría'],
             'manual_tiempo_seg' => ['Tiempo manual', 'integer', 'segundos', 'Tiempo'],
+            'manual_rango_codigo' => ['Rango ordinal del tiempo manual', 'integer', '1=Muy lento; 2=Lento; 3=Moderado; 4=Rápido; 5=Muy rápido', 'Tiempo'],
+            'manual_rango_etiqueta' => ['Etiqueta del tiempo manual', 'string', '', 'Tiempo'],
             'diferencia_tiempo_seg' => ['Tiempo manual menos prototipo', 'integer', 'segundos', 'Tiempo'],
+            'diferencia_tiempo_exacta_seg' => ['Diferencia exacta: manual menos prototipo', 'decimal', 'segundos', 'Tiempo'],
             'estado_evaluacion' => ['Estado de evaluación', 'string', 'pending|draft|completed', 'Auditoría'],
             'estado_general' => ['Resultado técnico general', 'string', '', 'Auditoría'],
             'etapa_fallo' => ['Etapa del fallo', 'string', '', 'Auditoría'],
@@ -63,7 +72,6 @@ class SoapEvaluationExporter
             'soap_generado' => ['SOAP generado', 'integer', '0=No; 1=Sí', 'Auditoría'],
             'pdf_generado' => ['PDF generado', 'integer', '0=No; 1=Sí', 'Auditoría'],
             'intento_procesamiento' => ['Intento evaluado', 'integer', '', 'Auditoría'],
-            'observacion_profesional' => ['Observaciones del profesional', 'string', '', 'Auditoría'],
             'uso_prototipo' => ['Uso del prototipo', 'integer', '0=No; 1=Sí', 'I'],
             'transcripcion_audio' => ['Transcripción del audio', 'integer', '0=No; 1=Sí', 'I'],
             'procesamiento_clinico' => ['Procesamiento clínico', 'integer', '0=No; 1=Sí', 'I'],
@@ -84,7 +92,7 @@ class SoapEvaluationExporter
         foreach (range(1, 6) as $i) {
             $variables["fu$i"] = ["Facilidad de uso $i", 'integer', '1-5 Likert', 'V'];
         }
-        $variables += ['fu_total' => ['Total facilidad', 'integer', '', 'V'], 'fu_promedio' => ['Promedio facilidad', 'decimal', '', 'V'], 'creado_en' => ['Fecha de creación', 'datetime', 'ISO 8601', 'Auditoría'], 'actualizado_en' => ['Último guardado', 'datetime', 'ISO 8601', 'Auditoría'], 'completado_en' => ['Fecha de finalización', 'datetime', 'ISO 8601', 'Auditoría']];
+        $variables += ['fu_total' => ['Total facilidad', 'integer', '', 'V'], 'fu_promedio' => ['Promedio facilidad', 'decimal', '', 'V']];
 
         return $variables;
     }
@@ -94,14 +102,26 @@ class SoapEvaluationExporter
         $row = [
             'codigo_prueba' => $e->test_code, 'codigo_consulta' => $e->consultation?->consultation_code, 'fecha_prueba' => $e->test_date?->format('Y-m-d'), 'evaluador_nombre' => $e->evaluator_name,
             'evaluador_especialidad' => $e->evaluator_specialization, 'consulta_duracion_seg' => $e->consultation_duration_seconds,
-            'audio_duracion_seg' => $e->audio_duration_seconds, 'ia_tiempo_seg' => $e->ai_time_seconds, 'manual_tiempo_seg' => $e->manual_time_seconds,
-            'diferencia_tiempo_seg' => $e->time_difference_seconds, 'estado_evaluacion' => $e->status,
+            'audio_duracion_seg' => $this->audioDurationSeconds($e),
+            'ia_tiempo_seg' => $e->consultation?->processing_time_seconds ?? $e->ai_time_seconds,
+            'tiempo_procesamiento_seg' => $e->consultation?->processing_time_seconds,
+            'tiempo_procesamiento_ms' => $e->consultation?->processing_time_ms,
+            'rango_tiempo_codigo' => $e->consultation?->processing_time_range,
+            'rango_tiempo_etiqueta' => $e->consultation?->processing_time_label,
+            'estado_procesamiento' => $e->consultation?->processing_status,
+            'numero_reintentos' => $e->consultation?->retry_count,
+            'manual_tiempo_seg' => $e->manual_time_seconds,
+            'manual_rango_codigo' => $e->manual_time_range,
+            'manual_rango_etiqueta' => $e->manual_time_label,
+            'diferencia_tiempo_seg' => $e->time_difference_seconds,
+            'diferencia_tiempo_exacta_seg' => $e->time_difference_seconds_exact,
+            'estado_evaluacion' => $e->status,
             'estado_general' => $e->consultation?->overall_status, 'etapa_fallo' => $e->consultation?->failure_stage,
             'codigo_error' => $e->consultation?->failure_code, 'tipo_resultado_evaluacion' => $e->evaluation_result_type,
             'segmentos_creados' => $e->consultation?->expected_segments, 'segmentos_enviados' => $e->consultation?->received_segments,
             'segmentos_transcritos' => $e->consultation?->transcribed_segments, 'soap_generado' => $e->consultation?->soap_status === 'completed' ? 1 : 0,
             'pdf_generado' => $e->consultation?->pdf_status === 'completed' ? 1 : 0,
-            'intento_procesamiento' => $e->processingAttempt?->attempt_number, 'observacion_profesional' => $e->error_observations,
+            'intento_procesamiento' => $e->processingAttempt?->attempt_number,
             'uso_prototipo' => $e->use_prototype, 'transcripcion_audio' => $e->audio_transcription, 'procesamiento_clinico' => $e->clinical_processing, 'generacion_soap' => $e->soap_generation,
             'soap_subjetivo' => $e->soap_subjective, 'soap_objetivo' => $e->soap_objective, 'soap_evaluacion' => $e->soap_assessment, 'soap_plan' => $e->soap_plan, 'soap_ubicacion' => $e->soap_placement, 'soap_claridad' => $e->soap_clarity, 'soap_total' => $e->soap_total, 'soap_porcentaje' => $e->soap_percentage,
             'err_transcripcion' => $e->error_transcription, 'err_omision' => $e->error_omission, 'err_agregada' => $e->error_added, 'err_confusion' => $e->error_confusion, 'err_ubicacion' => $e->error_placement, 'err_redaccion' => $e->error_wording, 'err_total' => $e->error_total, 'err_totalmente_erroneos' => $e->error_totally_wrong_count, 'err_graves' => $e->error_severe_count, 'err_moderados' => $e->error_moderate_count, 'err_leves' => $e->error_mild_count, 'err_sin_error' => $e->error_none_count, 'err_observaciones' => $e->error_observations,
@@ -114,7 +134,7 @@ class SoapEvaluationExporter
         foreach (range(1, 6) as $i) {
             $row["fu$i"] = $e->{"ease_$i"};
         }
-        $row += ['fu_total' => $e->ease_total, 'fu_promedio' => $e->ease_average, 'creado_en' => $e->created_at?->toIso8601String(), 'actualizado_en' => $e->last_saved_at?->toIso8601String(), 'completado_en' => $e->completed_at?->toIso8601String()];
+        $row += ['fu_total' => $e->ease_total, 'fu_promedio' => $e->ease_average];
 
         return $row;
     }
@@ -132,6 +152,27 @@ class SoapEvaluationExporter
         fclose($file);
 
         return $path;
+    }
+
+    private function audioDurationSeconds($evaluation): ?int
+    {
+        $evaluationDuration = (int) ($evaluation->audio_duration_seconds ?? 0);
+        if ($evaluationDuration > 0) {
+            return $evaluationDuration;
+        }
+
+        $consultation = $evaluation->consultation;
+        if (! $consultation) {
+            return null;
+        }
+        $consultationDuration = (int) ($consultation->recording_duration_seconds ?? 0);
+        if ($consultationDuration > 0) {
+            return $consultationDuration;
+        }
+
+        $segmentsDuration = (int) $consultation->audioSegments()->sum('duration_seconds');
+
+        return $segmentsDuration > 0 ? $segmentsDuration : null;
     }
 
     private function xlsx(Collection $rows): string
@@ -176,7 +217,7 @@ class SoapEvaluationExporter
                 'name' => $name,
                 'label' => $metadata[0],
                 'width' => $isNumeric ? 8 : $this->stringWidth($values),
-                'decimals' => $metadata[1] === 'decimal' ? 2 : 0,
+                'decimals' => in_array($name, ['ia_tiempo_seg', 'tiempo_procesamiento_seg', 'diferencia_tiempo_exacta_seg'], true) ? 3 : ($metadata[1] === 'decimal' ? 2 : 0),
                 'format' => $isNumeric ? SavVariable::FORMAT_TYPE_F : SavVariable::FORMAT_TYPE_A,
                 'columns' => $isNumeric ? 12 : min($this->stringWidth($values), 80),
                 'alignment' => $isNumeric ? SavVariable::ALIGN_RIGHT : SavVariable::ALIGN_LEFT,
@@ -230,6 +271,9 @@ class SoapEvaluationExporter
         if (! $isNumeric) {
             return SavVariable::MEASURE_NOMINAL;
         }
+        if (in_array($name, ['rango_tiempo_codigo', 'manual_rango_codigo'], true)) {
+            return SavVariable::MEASURE_ORDINAL;
+        }
         if (preg_match('/^(uso_|transcripcion_|procesamiento_|generacion_|soap_(subjetivo|objetivo|evaluacion|plan|ubicacion|claridad)|err_|up[1-6]$|fu[1-6]$)/', $name)) {
             return SavVariable::MEASURE_ORDINAL;
         }
@@ -241,6 +285,9 @@ class SoapEvaluationExporter
     {
         if (in_array($name, ['uso_prototipo', 'transcripcion_audio', 'procesamiento_clinico', 'generacion_soap'], true)) {
             return [0 => 'No', 1 => 'Sí'];
+        }
+        if (in_array($name, ['rango_tiempo_codigo', 'manual_rango_codigo'], true)) {
+            return [1 => 'Muy lento', 2 => 'Lento', 3 => 'Moderado', 4 => 'Rápido', 5 => 'Muy rápido'];
         }
         if (preg_match('/^soap_(subjetivo|objetivo|evaluacion|plan|ubicacion|claridad)$/', $name)) {
             return [1 => 'No cumple', 2 => 'Cumple parcialmente', 3 => 'Cumple', 98 => 'No aplica: no se generó SOAP'];

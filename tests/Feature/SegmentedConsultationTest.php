@@ -123,6 +123,11 @@ class SegmentedConsultationTest extends TestCase
             'id' => $consultation,
             'transcription_strategy' => 'single',
             'transcription_status' => 'queued',
+            'recording_duration_seconds' => 72,
+        ]);
+        $this->assertDatabaseHas('soap_evaluations', [
+            'consultation_id' => $consultation,
+            'audio_duration_seconds' => 72,
         ]);
         Queue::assertPushed(TranscribeConsultationAudioJob::class);
         $this->withToken($this->token)->postJson("/api/consultations/$consultation/finalize", [
@@ -153,7 +158,17 @@ class SegmentedConsultationTest extends TestCase
         $this->withToken($this->token)
             ->getJson("/api/consultations/$consultation/processing-status")
             ->assertOk()
-            ->assertJsonStructure(['processing_status', 'progress_percentage', 'pending_segments']);
+            ->assertJsonStructure([
+                'processing_status',
+                'processing_time_ms',
+                'processing_time_seconds',
+                'processing_time_range',
+                'processing_time_label',
+                'soap_generated',
+                'retry_count',
+                'progress_percentage',
+                'pending_segments',
+            ]);
         $this->withToken($this->token)
             ->getJson("/api/consultations/$consultation/missing-segments")
             ->assertOk()
