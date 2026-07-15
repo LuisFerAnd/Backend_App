@@ -150,6 +150,46 @@ class SoapEvaluationTest extends TestCase
         $this->assertGreaterThan(500, strlen($sav->streamedContent()));
     }
 
+    public function test_admin_can_only_view_the_doctors_existing_evaluation(): void
+    {
+        [$doctor, $consultation] = $this->consultation();
+        $doctor->assignRole('doctor');
+        $evaluation = app(SoapEvaluationFactory::class)->firstOrCreate($consultation, $doctor);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $token = $this->login($admin);
+
+        $this->withToken($token)
+            ->getJson("/api/consultations/{$consultation->id}/soap-evaluation")
+            ->assertOk()
+            ->assertJsonPath('evaluation.id', $evaluation->id)
+            ->assertJsonPath('evaluation.evaluator_id', $doctor->id)
+            ->assertJsonPath('evaluation.evaluator_name', $doctor->name);
+
+        $this->withToken($token)
+            ->putJson("/api/soap-evaluations/{$evaluation->id}", ['version' => 1, 'use_prototype' => 1])
+            ->assertForbidden();
+        $this->withToken($token)
+            ->postJson("/api/soap-evaluations/{$evaluation->id}/complete", ['version' => 1])
+            ->assertForbidden();
+    }
+
+    public function test_admin_does_not_create_an_evaluation_when_the_doctor_has_not_made_one(): void
+    {
+        [, $consultation] = $this->consultation();
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->withToken($this->login($admin))
+            ->getJson("/api/consultations/{$consultation->id}/soap-evaluation")
+            ->assertNotFound();
+
+        $this->assertDatabaseMissing('soap_evaluations', [
+            'consultation_id' => $consultation->id,
+            'evaluator_id' => $admin->id,
+        ]);
+    }
+
     private function consultation(?User $doctor = null): array
     {
         $doctor ??= User::factory()->create(['specialization' => 'Medicina interna']);

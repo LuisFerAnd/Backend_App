@@ -17,16 +17,23 @@ class SoapEvaluationController extends Controller
     public function forConsultation(Request $request, Consultation $consultation, SoapEvaluationFactory $factory): JsonResponse
     {
         $this->authorizeConsultation($request, $consultation);
-        abort_unless($request->user()->can('evaluations.view_own'), 403);
-        $evaluation = $factory->firstOrCreate($consultation, $request->user());
+        if ($request->user()->hasRole('admin')) {
+            abort_unless($request->user()->can('evaluations.view_all'), 403);
+            $evaluation = SoapEvaluation::where('consultation_id', $consultation->id)->first();
+            abort_if($evaluation === null, 404, 'Esta consulta todavía no tiene una evaluación registrada por el doctor.');
+        } else {
+            abort_unless($request->user()->can('evaluations.view_own'), 403);
+            $evaluation = $factory->firstOrCreate($consultation, $request->user());
+        }
 
         return response()->json(['evaluation' => $this->load($evaluation)]);
     }
 
     public function update(Request $request, SoapEvaluation $evaluation, SoapEvaluationCalculator $calculator): JsonResponse
     {
+        abort_if($request->user()->hasRole('admin'), 403, 'El administrador solo puede consultar evaluaciones.');
         $this->authorizeEvaluation($request, $evaluation, 'evaluations.update_own');
-        if ($evaluation->status === 'completed' && ! $request->user()->hasRole('admin')) {
+        if ($evaluation->status === 'completed') {
             return response()->json(['message' => 'La evaluación completada no puede editarse.'], 409);
         }
 
@@ -54,6 +61,7 @@ class SoapEvaluationController extends Controller
 
     public function complete(Request $request, SoapEvaluation $evaluation, SoapEvaluationCalculator $calculator): JsonResponse
     {
+        abort_if($request->user()->hasRole('admin'), 403, 'El administrador solo puede consultar evaluaciones.');
         $this->authorizeEvaluation($request, $evaluation, 'evaluations.update_own');
         if ($evaluation->status === 'completed') {
             return response()->json(['evaluation' => $this->load($evaluation)]);
