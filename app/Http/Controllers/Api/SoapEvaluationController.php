@@ -146,7 +146,7 @@ class SoapEvaluationController extends Controller
 
     private function rules(): array
     {
-        $rules = ['version' => ['required', 'integer', 'min:1'], 'consultation_duration_seconds' => ['nullable', 'integer', 'min:0'], 'consultation_duration_source' => ['nullable', Rule::in(['system', 'manual'])], 'manual_time_seconds' => ['nullable', 'integer', 'min:0'], 'error_observations' => ['nullable', 'string', 'max:2000']];
+        $rules = ['version' => ['required', 'integer', 'min:1'], 'consultation_duration_seconds' => ['nullable', 'integer', 'min:0'], 'consultation_duration_source' => ['nullable', Rule::in(['system', 'manual'])], 'manual_time_seconds' => ['nullable', 'integer', 'min:1'], 'error_observations' => ['nullable', 'string', 'max:2000']];
         foreach (SoapEvaluationCalculator::BINARY as $field) {
             $rules[$field] = ['nullable', Rule::in([0, 1])];
         }
@@ -173,6 +173,9 @@ class SoapEvaluationController extends Controller
             'manual_time_label',
             'time_difference_seconds',
             'time_difference_seconds_exact',
+            'time_savings_percentage',
+            'time_savings_range',
+            'time_savings_label',
             'error_observations',
             'evaluation_result_type',
             ...SoapEvaluationCalculator::BINARY,

@@ -18,16 +18,32 @@ class SoapEvaluationCalculator
 
     public function calculate(array $data): array
     {
-        if (array_key_exists('manual_time_seconds', $data) && $data['manual_time_seconds'] !== null) {
+        if (array_key_exists('manual_time_seconds', $data) && $data['manual_time_seconds'] === null) {
+            foreach (['manual_time_range', 'manual_time_label', ...$this->timeComparisonFields()] as $field) {
+                $data[$field] = null;
+            }
+        } elseif (array_key_exists('manual_time_seconds', $data)) {
             [$range, $label] = $this->processingTime->classifyProcessingTime((float) $data['manual_time_seconds']);
             $data['manual_time_range'] = $range;
             $data['manual_time_label'] = $label;
 
             $prototypeSeconds = $data['prototype_time_seconds'] ?? $data['ai_time_seconds'] ?? null;
-            if ($prototypeSeconds !== null) {
+            if ($prototypeSeconds === null) {
+                foreach ($this->timeComparisonFields() as $field) {
+                    $data[$field] = null;
+                }
+            } else {
                 $exactDifference = (float) $data['manual_time_seconds'] - (float) $prototypeSeconds;
                 $data['time_difference_seconds_exact'] = round($exactDifference, 3);
                 $data['time_difference_seconds'] = (int) round($exactDifference);
+
+                if ((float) $data['manual_time_seconds'] > 0) {
+                    $savingsPercentage = ($exactDifference / (float) $data['manual_time_seconds']) * 100;
+                    [$savingsRange, $savingsLabel] = $this->classifyTimeSavings($savingsPercentage);
+                    $data['time_savings_percentage'] = round($savingsPercentage, 3);
+                    $data['time_savings_range'] = $savingsRange;
+                    $data['time_savings_label'] = $savingsLabel;
+                }
             }
         }
 
@@ -56,6 +72,30 @@ class SoapEvaluationCalculator
         }
 
         return $data;
+    }
+
+    /** @return array{0: int, 1: string} */
+    private function classifyTimeSavings(float $percentage): array
+    {
+        return match (true) {
+            $percentage < -25 => [1, 'Pérdida considerable'],
+            $percentage < -5 => [2, 'Pérdida leve'],
+            $percentage <= 5 => [3, 'Sin cambio relevante'],
+            $percentage <= 25 => [4, 'Ahorro moderado'],
+            default => [5, 'Ahorro considerable'],
+        };
+    }
+
+    /** @return list<string> */
+    private function timeComparisonFields(): array
+    {
+        return [
+            'time_difference_seconds',
+            'time_difference_seconds_exact',
+            'time_savings_percentage',
+            'time_savings_range',
+            'time_savings_label',
+        ];
     }
 
     public function requiredFields(bool $soapGenerated = true): array

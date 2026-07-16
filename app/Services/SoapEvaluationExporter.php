@@ -61,6 +61,9 @@ class SoapEvaluationExporter
             'manual_rango_etiqueta' => ['Etiqueta del tiempo manual', 'string', '', 'Tiempo'],
             'diferencia_tiempo_seg' => ['Tiempo manual menos prototipo', 'integer', 'segundos', 'Tiempo'],
             'diferencia_tiempo_exacta_seg' => ['Diferencia exacta: manual menos prototipo', 'decimal', 'segundos', 'Tiempo'],
+            'ahorro_tiempo_porcentaje' => ['Ahorro de tiempo respecto al método manual', 'decimal', 'porcentaje; positivo=ahorro, negativo=pérdida', 'Tiempo'],
+            'ahorro_tiempo_codigo' => ['Clasificación ordinal del ahorro de tiempo', 'integer', '1=Pérdida considerable; 2=Pérdida leve; 3=Sin cambio relevante; 4=Ahorro moderado; 5=Ahorro considerable', 'Tiempo'],
+            'ahorro_tiempo_etiqueta' => ['Etiqueta de la clasificación del ahorro', 'string', '', 'Tiempo'],
             'estado_evaluacion' => ['Estado de evaluación', 'string', 'pending|draft|completed', 'Auditoría'],
             'estado_general' => ['Resultado técnico general', 'string', '', 'Auditoría'],
             'etapa_fallo' => ['Etapa del fallo', 'string', '', 'Auditoría'],
@@ -115,6 +118,9 @@ class SoapEvaluationExporter
             'manual_rango_etiqueta' => $e->manual_time_label,
             'diferencia_tiempo_seg' => $e->time_difference_seconds,
             'diferencia_tiempo_exacta_seg' => $e->time_difference_seconds_exact,
+            'ahorro_tiempo_porcentaje' => $e->time_savings_percentage,
+            'ahorro_tiempo_codigo' => $e->time_savings_range,
+            'ahorro_tiempo_etiqueta' => $e->time_savings_label,
             'estado_evaluacion' => $e->status,
             'estado_general' => $e->consultation?->overall_status, 'etapa_fallo' => $e->consultation?->failure_stage,
             'codigo_error' => $e->consultation?->failure_code, 'tipo_resultado_evaluacion' => $e->evaluation_result_type,
@@ -217,7 +223,7 @@ class SoapEvaluationExporter
                 'name' => $name,
                 'label' => $metadata[0],
                 'width' => $isNumeric ? 8 : $this->stringWidth($values),
-                'decimals' => in_array($name, ['ia_tiempo_seg', 'tiempo_procesamiento_seg', 'diferencia_tiempo_exacta_seg'], true) ? 3 : ($metadata[1] === 'decimal' ? 2 : 0),
+                'decimals' => in_array($name, ['ia_tiempo_seg', 'tiempo_procesamiento_seg', 'diferencia_tiempo_exacta_seg', 'ahorro_tiempo_porcentaje'], true) ? 3 : ($metadata[1] === 'decimal' ? 2 : 0),
                 'format' => $isNumeric ? SavVariable::FORMAT_TYPE_F : SavVariable::FORMAT_TYPE_A,
                 'columns' => $isNumeric ? 12 : min($this->stringWidth($values), 80),
                 'alignment' => $isNumeric ? SavVariable::ALIGN_RIGHT : SavVariable::ALIGN_LEFT,
@@ -271,7 +277,7 @@ class SoapEvaluationExporter
         if (! $isNumeric) {
             return SavVariable::MEASURE_NOMINAL;
         }
-        if (in_array($name, ['rango_tiempo_codigo', 'manual_rango_codigo'], true)) {
+        if (in_array($name, ['rango_tiempo_codigo', 'manual_rango_codigo', 'ahorro_tiempo_codigo'], true)) {
             return SavVariable::MEASURE_ORDINAL;
         }
         if (preg_match('/^(uso_|transcripcion_|procesamiento_|generacion_|soap_(subjetivo|objetivo|evaluacion|plan|ubicacion|claridad)|err_|up[1-6]$|fu[1-6]$)/', $name)) {
@@ -288,6 +294,9 @@ class SoapEvaluationExporter
         }
         if (in_array($name, ['rango_tiempo_codigo', 'manual_rango_codigo'], true)) {
             return [1 => 'Muy lento', 2 => 'Lento', 3 => 'Moderado', 4 => 'Rápido', 5 => 'Muy rápido'];
+        }
+        if ($name === 'ahorro_tiempo_codigo') {
+            return [1 => 'Pérdida considerable', 2 => 'Pérdida leve', 3 => 'Sin cambio relevante', 4 => 'Ahorro moderado', 5 => 'Ahorro considerable'];
         }
         if (preg_match('/^soap_(subjetivo|objetivo|evaluacion|plan|ubicacion|claridad)$/', $name)) {
             return [1 => 'No cumple', 2 => 'Cumple parcialmente', 3 => 'Cumple', 98 => 'No aplica: no se generó SOAP'];

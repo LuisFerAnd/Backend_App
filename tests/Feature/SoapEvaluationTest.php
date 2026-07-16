@@ -64,6 +64,9 @@ class SoapEvaluationTest extends TestCase
         $result = app(SoapEvaluationCalculator::class)->calculate($data);
         $this->assertSame(475, $result['time_difference_seconds']);
         $this->assertSame(475.0, $result['time_difference_seconds_exact']);
+        $this->assertSame(79.167, $result['time_savings_percentage']);
+        $this->assertSame(5, $result['time_savings_range']);
+        $this->assertSame('Ahorro considerable', $result['time_savings_label']);
         $this->assertSame(1, $result['manual_time_range']);
         $this->assertSame('Muy lento', $result['manual_time_label']);
         $this->assertSame(18, $result['soap_total']);
@@ -74,6 +77,28 @@ class SoapEvaluationTest extends TestCase
         $this->assertSame(5.0, $result['utility_average']);
         $this->assertSame(18, $result['ease_total']);
         $this->assertSame(3.0, $result['ease_average']);
+    }
+
+    public function test_time_savings_classification_uses_the_defined_percentage_boundaries(): void
+    {
+        $calculator = app(SoapEvaluationCalculator::class);
+        $cases = [
+            [100, 130, -30.0, 1],
+            [100, 125, -25.0, 2],
+            [100, 105, -5.0, 3],
+            [100, 95, 5.0, 3],
+            [100, 75, 25.0, 4],
+            [100, 70, 30.0, 5],
+        ];
+
+        foreach ($cases as [$manual, $prototype, $percentage, $range]) {
+            $result = $calculator->calculate([
+                'manual_time_seconds' => $manual,
+                'prototype_time_seconds' => $prototype,
+            ]);
+            $this->assertSame($percentage, $result['time_savings_percentage']);
+            $this->assertSame($range, $result['time_savings_range']);
+        }
     }
 
     public function test_draft_version_conflict_completion_validation_and_export_authorization(): void
@@ -106,6 +131,8 @@ class SoapEvaluationTest extends TestCase
             ->postJson("/api/soap-evaluations/$id/complete", $complete)
             ->assertOk()
             ->assertJsonPath('evaluation.status', 'completed')
+            ->assertJsonPath('evaluation.time_savings_range', 5)
+            ->assertJsonPath('evaluation.time_savings_label', 'Ahorro considerable')
             ->assertJsonPath('evaluation.test_code', $created->json('evaluation.test_code'))
             ->assertJsonPath('evaluation.test_date', $created->json('evaluation.test_date'));
 
@@ -128,6 +155,9 @@ class SoapEvaluationTest extends TestCase
             'error_total' => 30,
             'error_totally_wrong_count' => 0,
             'error_none_count' => 6,
+            'time_savings_percentage' => 70,
+            'time_savings_range' => 5,
+            'time_savings_label' => 'Ahorro considerable',
         ]);
         $consultation->update(['recording_duration_seconds' => 85]);
         $admin = User::factory()->create();
@@ -145,6 +175,9 @@ class SoapEvaluationTest extends TestCase
         $csvHeaders = array_flip($csvRows[0]);
         $this->assertSame('85', $csvRows[1][$csvHeaders['audio_duracion_seg']]);
         $this->assertSame('12', $csvRows[1][$csvHeaders['ia_tiempo_seg']]);
+        $this->assertSame('70.000', $csvRows[1][$csvHeaders['ahorro_tiempo_porcentaje']]);
+        $this->assertSame('5', $csvRows[1][$csvHeaders['ahorro_tiempo_codigo']]);
+        $this->assertSame('Ahorro considerable', $csvRows[1][$csvHeaders['ahorro_tiempo_etiqueta']]);
 
         $xlsx = $this->withToken($token)->get('/api/admin/soap-evaluations/export/xlsx?status=completed')->assertOk();
         $path = tempnam(sys_get_temp_dir(), 'xlsx');
