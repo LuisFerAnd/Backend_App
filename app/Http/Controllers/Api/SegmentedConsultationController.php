@@ -275,10 +275,32 @@ class SegmentedConsultationController extends Controller
         ], 202);
     }
 
-    public function status(Request $request, Consultation $consultation): JsonResponse
-    {
+    public function status(
+        Request $request,
+        Consultation $consultation,
+        ConsultationAttemptTracker $attemptTracker
+    ): JsonResponse {
         $this->authorizeConsultation($request, $consultation);
         $consultation->refresh();
+        $processingTimeout = max(60, (int) config('services.openai.processing_stale_timeout', 600));
+        $canBecomeStale = in_array($consultation->processing_status, [
+            'transcribing',
+            'merging_transcriptions',
+            'generating_soap',
+        ], true);
+        if ($canBecomeStale &&
+            $consultation->processing_started_at !== null &&
+            $consultation->processing_started_at->lte(now()->subSeconds($processingTimeout))) {
+            $attemptTracker->fail(
+                $consultation,
+                'processing',
+                'PROCESSING_STALLED',
+                "El procesamiento no avanzo durante {$processingTimeout} segundos.",
+                'La consulta fue registrada como fallida porque el procesamiento no finalizo.',
+                'timeout'
+            );
+            $consultation->refresh();
+        }
         $failed = $consultation->audioSegments()->where('transcription_status', 'failed')->count();
         $pending = max(0, (int) ($consultation->expected_segments ?? $consultation->received_segments) - $consultation->transcribed_segments);
 

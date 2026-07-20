@@ -43,6 +43,7 @@ return [
         'soap_model' => env('OPENAI_SOAP_MODEL', 'gpt-5.4-nano'),
         'soap_effort' => env('OPENAI_SOAP_EFFORT', 'low'),
         'timeout' => env('OPENAI_TIMEOUT', 120),
+        'processing_stale_timeout' => (int) env('PROCESSING_STALE_TIMEOUT_SECONDS', 600),
         'segment_max_kb' => (int) env('AUDIO_SEGMENT_MAX_KB', 20480),
         'single_transcription_max_kb' => (int) env('AUDIO_SINGLE_TRANSCRIPTION_MAX_KB', 24576),
         'ffmpeg_binary' => env('FFMPEG_BINARY', 'ffmpeg'),

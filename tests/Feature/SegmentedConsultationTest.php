@@ -200,6 +200,30 @@ class SegmentedConsultationTest extends TestCase
         Queue::assertNotPushed(GenerateSoapJob::class);
     }
 
+    public function test_status_marks_stalled_processing_as_timeout(): void
+    {
+        config(['services.openai.processing_stale_timeout' => 600]);
+        $consultationId = $this->createSegmentedSession();
+        Consultation::findOrFail($consultationId)->update([
+            'processing_status' => 'transcribing',
+            'overall_status' => 'transcribing',
+            'processing_started_at' => now()->subMinutes(11),
+        ]);
+
+        $this->withToken($this->token)
+            ->getJson("/api/consultations/$consultationId/processing-status")
+            ->assertOk()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('processing_status', 'timeout');
+
+        $this->assertDatabaseHas('consultations', [
+            'id' => $consultationId,
+            'processing_status' => 'timeout',
+            'overall_status' => 'timeout',
+            'failure_code' => 'PROCESSING_STALLED',
+        ]);
+    }
+
     public function test_failed_transcription_can_be_requeued(): void
     {
         $consultation = $this->createSegmentedSession();
