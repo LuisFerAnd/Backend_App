@@ -11,6 +11,7 @@ use App\Models\Consultation;
 use App\Models\ConsultationAudioSegment;
 use App\Services\AudioSegmentConsolidator;
 use App\Services\OpenAIClinicalAssistant;
+use App\Services\SoapEvaluationFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
@@ -58,6 +59,55 @@ class SegmentedConsultationTest extends TestCase
         Storage::disk('local')->assertExists($segment->storage_path);
         Queue::assertNotPushed(TranscribeAudioSegmentJob::class);
         Queue::assertNotPushed(TranscribeConsultationAudioJob::class);
+    }
+
+    public function test_doctor_can_start_a_new_consultation_for_a_newly_registered_patient(): void
+    {
+        $firstConsultation = $this->createSegmentedSession();
+        $secondPatientId = $this->withToken($this->token)->postJson('/api/patients', [
+            'first_name' => 'Paciente',
+            'last_name' => 'Nuevo',
+            'dni' => '0801199020000',
+        ])->assertCreated()->json('patient.id');
+        $this->withToken($this->token)->getJson('/api/patients')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $secondPatientId, 'dni' => '0801199020000']);
+
+        $payload = [
+            'patient_id' => $secondPatientId,
+            'session_uuid' => 'b4ad02d9-524f-4e5f-958c-37f38b50b558',
+        ];
+        $secondConsultation = $this->withToken($this->token)
+            ->postJson('/api/consultations/start', $payload)
+            ->assertCreated()
+            ->json('consultation_id');
+        $this->withToken($this->token)
+            ->postJson('/api/consultations/start', $payload)
+            ->assertOk()
+            ->assertJsonPath('consultation_id', $secondConsultation);
+
+        $this->assertNotSame($firstConsultation, $secondConsultation);
+        $this->assertDatabaseCount('consultations', 2);
+        $this->assertDatabaseHas('consultations', [
+            'id' => $secondConsultation,
+            'patient_id' => $secondPatientId,
+        ]);
+    }
+
+    public function test_start_rolls_back_the_consultation_when_initialization_fails(): void
+    {
+        $this->mock(SoapEvaluationFactory::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('firstOrCreate')->once()->andThrow(new \RuntimeException('evaluation setup failed'));
+        });
+
+        $uuid = '65cd2156-8b2b-45fe-b089-516a0e4b06ab';
+        $this->withToken($this->token)->postJson('/api/consultations/start', [
+            'patient_id' => $this->patientId,
+            'session_uuid' => $uuid,
+        ])->assertServerError();
+
+        $this->assertDatabaseMissing('consultations', ['session_uuid' => $uuid]);
+        $this->assertDatabaseCount('consultation_processing_attempts', 0);
     }
 
     public function test_same_checksum_is_idempotent(): void

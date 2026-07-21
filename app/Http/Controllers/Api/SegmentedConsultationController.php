@@ -41,35 +41,47 @@ class SegmentedConsultationController extends Controller
 
         if (! $consultation) {
             try {
-                $consultation = Consultation::create([
-                    'doctor_id' => $request->user()->id,
-                    'patient_id' => $patient->id,
-                    'session_uuid' => $data['session_uuid'],
-                    'consulted_at' => $data['started_at'] ?? now(),
-                    'started_at' => $data['started_at'] ?? now(),
-                    'local_consultation_code' => $data['local_consultation_code'] ?? null,
-                    'created_offline' => (bool) ($data['created_offline'] ?? false),
-                    'synced_at' => now(),
-                    'reason' => 'no especificado',
-                    'subjective' => 'no especificado',
-                    'objective' => 'no especificado',
-                    'assessment' => 'no especificado',
-                    'plan' => 'no especificado',
-                    'recording_status' => 'recording',
-                    'upload_status' => 'not_started',
-                    'transcription_status' => 'not_started',
-                    'processing_status' => 'recording',
-                    'soap_status' => 'pending',
-                    'pdf_status' => 'not_generated',
-                    'overall_status' => 'recording',
-                    'is_evaluable' => true,
-                ]);
+                $consultation = DB::transaction(function () use ($request, $patient, $data): Consultation {
+                    $consultation = Consultation::create([
+                        'doctor_id' => $request->user()->id,
+                        'patient_id' => $patient->id,
+                        'session_uuid' => $data['session_uuid'],
+                        'consulted_at' => $data['started_at'] ?? now(),
+                        'started_at' => $data['started_at'] ?? now(),
+                        'local_consultation_code' => $data['local_consultation_code'] ?? null,
+                        'created_offline' => (bool) ($data['created_offline'] ?? false),
+                        'synced_at' => now(),
+                        'reason' => 'no especificado',
+                        'subjective' => 'no especificado',
+                        'objective' => 'no especificado',
+                        'assessment' => 'no especificado',
+                        'plan' => 'no especificado',
+                        'recording_status' => 'recording',
+                        'upload_status' => 'not_started',
+                        'transcription_status' => 'not_started',
+                        'processing_status' => 'recording',
+                        'soap_status' => 'pending',
+                        'pdf_status' => 'not_generated',
+                        'overall_status' => 'recording',
+                        'is_evaluable' => true,
+                    ]);
+                    $consultation->update([
+                        'consultation_code' => 'C-'.$consultation->started_at->timezone(config('app.timezone'))->format('d-m-Y').'-'.str_pad((string) $consultation->id, 6, '0', STR_PAD_LEFT),
+                    ]);
+                    app(ConsultationAttemptTracker::class)->current($consultation);
+                    app(SoapEvaluationFactory::class)->firstOrCreate($consultation, $request->user());
+
+                    return $consultation;
+                });
                 $created = true;
-            } catch (QueryException) {
+            } catch (QueryException $exception) {
                 $consultation = Consultation::query()
                     ->where('doctor_id', $request->user()->id)
                     ->where('session_uuid', $data['session_uuid'])
-                    ->firstOrFail();
+                    ->first();
+                if (! $consultation) {
+                    throw $exception;
+                }
             }
         } elseif ($consultation->patient_id !== $patient->id) {
             return response()->json([
@@ -77,14 +89,6 @@ class SegmentedConsultationController extends Controller
                 'message' => 'La sesión ya está asociada con otra consulta.',
             ], 409);
         }
-        if ($created) {
-            $consultation->update([
-                'consultation_code' => 'C-'.$consultation->started_at->timezone(config('app.timezone'))->format('d-m-Y').'-'.str_pad((string) $consultation->id, 6, '0', STR_PAD_LEFT),
-            ]);
-            app(ConsultationAttemptTracker::class)->current($consultation);
-            app(SoapEvaluationFactory::class)->firstOrCreate($consultation, $request->user());
-        }
-
         return response()->json([
             'success' => true,
             'consultation_id' => $consultation->id,
